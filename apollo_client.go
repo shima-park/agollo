@@ -176,6 +176,7 @@ func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, name
 		url.QueryEscape(c.getNamespace(namespace)),
 		c.IP,
 	)
+
 	var req *http.Request
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {

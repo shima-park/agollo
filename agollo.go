@@ -36,7 +36,7 @@ type Agollo interface {
 	Options() Options
 }
 
-type Configurations map[string]string
+type Configurations map[string]interface{}
 
 type ApolloResponse struct {
 	Namespace string
@@ -146,7 +146,8 @@ func (a *agollo) Get(key string, opts ...GetOption) string {
 		return getOpts.DefaultValue
 	}
 
-	return val
+	v, _ := ToStringE(val)
+	return v
 }
 
 func (a *agollo) GetNameSpace(namespace string) Configurations {
