@@ -128,31 +128,6 @@ func resolveValueToGoInterface(configType string, val interface{}) interface{} {
 	return val
 }
 
-// 将a.b.c这种key切分成数组[a,b,c]，使用该数组的每个值生成一个嵌套的map
-// 最后将值存储到最终的map中
-func setMap(source map[string]interface{}, path []string, val interface{}) {
-	if len(path) == 0 {
-		return
-	}
-
-	next, ok := source[path[0]]
-	if ok {
-		if len(path) == 1 {
-			next.(map[string]interface{})[path[0]] = val
-			return
-		}
-		setMap(next.(map[string]interface{}), path[1:], val)
-	} else {
-		if len(path) == 1 {
-			source[path[0]] = val
-			return
-		}
-		source[path[0]] = map[string]interface{}{}
-		setMap(source[path[0]].(map[string]interface{}), path[1:], val)
-	}
-	return
-}
-
 func (cm apolloConfigManager) Watch(namespace string, stop chan bool) <-chan *viper.RemoteResponse {
 	resp := make(chan *viper.RemoteResponse, 0)
 	backendResp := cm.agollo.WatchNamespace(namespace, stop)
