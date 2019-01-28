@@ -15,6 +15,7 @@ go get -u github.com/shima-park/agollo
 * 配置文件容灾
 * 零依赖
 * 支持多namespace
+* 提供Viper配置库的apollo插件
 
 ## 示例
 ```
