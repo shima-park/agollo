@@ -342,6 +342,10 @@ func (a *agollo) backup() error {
 }
 
 func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
+	if _, err := os.Stat(a.opts.BackupFile); err != nil {
+		return nil, nil
+	}
+
 	data, err := ioutil.ReadFile(a.opts.BackupFile)
 	if err != nil {
 		return nil, err
