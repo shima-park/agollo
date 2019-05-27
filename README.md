@@ -15,6 +15,7 @@ go get -u github.com/shima-park/agollo
 * 配置文件容灾
 * 零依赖
 * 支持多namespace
+* 提供Viper配置库的apollo插件
 
 ## 示例
 ```
@@ -35,11 +36,18 @@ func main() {
 		agollo.InitWithConfigFile(configFilePath string, opts ....Option)
 
 		参数形式初始化agollo的方式，适合二次封装
+		(1)使用默认的内置对象，用来直接使用包的静态方法
 		agollo.Init(
 			"localhost:8080",
 			"AppTest",
 		        opts...,
 		)
+		(2)不使用包的静态方法，或者需要新建接口对象
+		newAgollo, err := agollo.New(
+			"localhost:8080",
+			"AppTest",
+		        opts...,
+			)
 	*/
 
 	// 获取默认配置中cluster=default namespace=application key=Name的值
