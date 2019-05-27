@@ -18,6 +18,7 @@ go get -u github.com/shima-park/agollo
 * 提供Viper配置库的apollo插件
 
 ## 示例
+请将example/sample下app.properties修改为你本地或者测试的apollo配置。
 ```
 func main() {
 	// 通过默认根目录下的app.properties初始化agollo
