@@ -107,7 +107,7 @@ func NewApolloClient(opts ...ApolloClientOption) ApolloClient {
 }
 
 func (c *apolloClient) Notifications(configServerURL, appID, cluster string, notifications []Notification) (status int, result []Notification, err error) {
-	url := fmt.Sprintf("http://%s/notifications/v2?appId=%s&cluster=%s&notifications=%s",
+	url := fmt.Sprintf("%s/notifications/v2?appId=%s&cluster=%s&notifications=%s",
 		configServerURL,
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
@@ -139,7 +139,7 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 		opt(&options)
 	}
 
-	url := fmt.Sprintf("http://%s/configs/%s/%s/%s?releaseKey=%s&ip=%s",
+	url := fmt.Sprintf("%s/configs/%s/%s/%s?releaseKey=%s&ip=%s",
 		configServerURL,
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
@@ -169,7 +169,7 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 }
 
 func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, namespace string) (config Configurations, err error) {
-	url := fmt.Sprintf("http://%s/configfiles/json/%s/%s/%s?ip=%s",
+	url := fmt.Sprintf("%s/configfiles/json/%s/%s/%s?ip=%s",
 		configServerURL,
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
