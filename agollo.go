@@ -78,7 +78,8 @@ func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
 		errorsCh: make(chan *LongPollerError),
 		opts:     newOptions(opts...),
 	}
-	a.opts.ConfigServerURL = configServerURL
+
+	a.opts.ConfigServerURL = normalizeURL(configServerURL)
 	a.opts.AppID = appID
 
 	return a.preload()
