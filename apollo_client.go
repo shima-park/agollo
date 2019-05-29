@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 )
 
 // https://github.com/ctripcorp/apollo/wiki/%E5%85%B6%E5%AE%83%E8%AF%AD%E8%A8%80%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8E%A5%E5%85%A5%E6%8C%87%E5%8D%97
@@ -107,12 +108,12 @@ func NewApolloClient(opts ...ApolloClientOption) ApolloClient {
 }
 
 func (c *apolloClient) Notifications(configServerURL, appID, cluster string, notifications []Notification) (status int, result []Notification, err error) {
-	url := fmt.Sprintf("%s/notifications/v2?appId=%s&cluster=%s&notifications=%s",
+	url := parseConfigServerURLWithDefaultSechme(fmt.Sprintf("%s/notifications/v2?appId=%s&cluster=%s&notifications=%s",
 		configServerURL,
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
 		url.QueryEscape(Notifications(notifications).String()),
-	)
+	))
 	var req *http.Request
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -139,14 +140,14 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 		opt(&options)
 	}
 
-	url := fmt.Sprintf("%s/configs/%s/%s/%s?releaseKey=%s&ip=%s",
+	url := parseConfigServerURLWithDefaultSechme(fmt.Sprintf("%s/configs/%s/%s/%s?releaseKey=%s&ip=%s",
 		configServerURL,
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
 		url.QueryEscape(c.getNamespace(namespace)),
 		options.ReleaseKey,
 		c.IP,
-	)
+	))
 	var req *http.Request
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -169,13 +170,13 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 }
 
 func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, namespace string) (config Configurations, err error) {
-	url := fmt.Sprintf("%s/configfiles/json/%s/%s/%s?ip=%s",
+	url := parseConfigServerURLWithDefaultSechme(fmt.Sprintf("%s/configfiles/json/%s/%s/%s?ip=%s",
 		configServerURL,
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
 		url.QueryEscape(c.getNamespace(namespace)),
 		c.IP,
-	)
+	))
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", url, nil)
@@ -241,4 +242,18 @@ func parseResponseBody(doer Doer, req *http.Request) (int, []byte, error) {
 	}
 
 	return resp.StatusCode, body, nil
+}
+
+/**
+ * 修正没有协议的配置地址
+ */
+func parseConfigServerURLWithDefaultSechme(configServerURL string) string {
+	matched, err := regexp.MatchString(".*://.*", configServerURL)
+	if err != nil {
+		return configServerURL
+	}
+	if !matched {
+		return fmt.Sprintf("http://%s", configServerURL)
+	}
+	return configServerURL
 }
