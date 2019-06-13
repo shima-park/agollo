@@ -149,7 +149,7 @@ func main(){
     err = v.ReadRemoteConfig()
     // ... error handle
 
-    // 直接序列化到结构体中
+    // 直接反序列化到结构体中
     var conf Config
     err = v.Unmarshal(&conf)
     // ... error handle
