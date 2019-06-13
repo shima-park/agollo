@@ -18,6 +18,22 @@ go get -u github.com/shima-park/agollo
 * 提供Viper配置库的apollo插件
 
 ## 示例
+
+##### 简单示例
+```
+func main(){
+    a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(
+		a.Get("Name"),
+		a.GetNameSpace("test.json"),
+	)
+}
+```
+##### 详细特性展示
 请将example/sample下app.properties修改为你本地或者测试的apollo配置。
 ```
 func main() {
@@ -54,10 +70,10 @@ func main() {
 	// 获取默认配置中cluster=default namespace=application key=Name的值
 	fmt.Println("Name:", agollo.Get("Name"))
 
-	// 获取默认配置中cluster=default namespace=application key=Name的值，提供默认值返回
+	// 获取默认配置中cluster=default namespace=application key=YourConfigKey的值，提供默认值返回
 	fmt.Println("YourConfigKey:", agollo.Get("YourConfigKey", agollo.WithDefault("YourDefaultValue")))
 
-	// 获取默认配置中cluster=default namespace=Test.Namespace key=Name的值，提供默认值返回
+	// 获取默认配置中cluster=default namespace=Test.Namespace key=YourConfigKey2的值，提供默认值返回
 	fmt.Println("YourConfigKey2:", agollo.Get("YourConfigKey2", agollo.WithDefault("YourDefaultValue"), agollo.WithNamespace("YourNamespace")))
 
 	// 获取namespace下的所有配置项
@@ -89,6 +105,63 @@ func main() {
 	}()
 
 	select {}
+}
+```
+
+## 结合viper使用，提高配置读取舒适度
+例如apollo中有以下配置:
+```
+appsalt = xxx
+database.driver = mysql
+database.host = localhost
+database.port = 3306
+database.timeout = 5s
+// ...
+```
+
+示例代码:
+```
+import (
+    "fmt"
+	"github.com/shima-park/agollo/viper-remote"
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	AppSalt string         `mapstructure:"appsalt"`
+	DB      DatabaseConfig `mapstructure:"database"`
+}
+
+type DatabaseConfig struct {
+	Driver   string        `mapstructure:"driver"`
+	Host     string        `mapstructure:"host"`
+	Port     int           `mapstructure:"port"`
+	Timeout time.Duration  `mapstructure:"timeout"`
+	// ...
+}
+
+func main(){
+    remote.SetAppID("your_appid")
+    v := viper.New()
+    v.SetConfigType("prop") // 根据namespace实际格式设置对应type
+    err := v.AddRemoteProvider("apollo", "your_apollo_endpoint", "your_apollo_namespace")
+    // ... error handle
+    err = v.ReadRemoteConfig()
+    // ... error handle
+
+    // 直接序列化到结构体中
+    var conf Config
+    err = v.Unmarshal(&conf)
+    // ... error handle
+    fmt.Printf("%+v\n", conf)
+    
+    // 各种基础类型配置项读取
+    fmt.Println("Host:", v.GetString("db.host"))
+    fmt.Println("Port:", v.GetInt("db.port"))
+    fmt.Println("Timeout:", v.GetDuration("db.timeout"))
+    
+    // 获取所有key，所有配置
+    fmt.Println("AllKeys", v.AllKeys(), "AllSettings",  v.AllSettings())
 }
 ```
 
