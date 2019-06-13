@@ -32,7 +32,7 @@ func main(){
 		a.Get("foo"),                // namespace为application中配置项foo的value
 		a.GetNameSpace("test.json"), // namespace为test.json的所有配置项
 		a.Get("foo", agollo.WithDefault("bar")), // foo这个key不存在时返回bar
-		a.Get("foo", agollo.WithNamespace("bar")), // namespace为bar, key为foo的value
+		a.Get("foo", agollo.WithNamespace("baz")), // namespace为baz, key为foo的value
 	)
 }
 ```
