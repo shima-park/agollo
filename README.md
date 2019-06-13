@@ -27,9 +27,12 @@ func main(){
 		panic(err)
 	}
 
+        // 获取your_appid下
 	fmt.Println(
-		a.Get("foo"),                // 获取your_appid下namespace为application中配置项foo的value
-		a.GetNameSpace("test.json"), // 获取your_appid下namespace为test.json的所有配置项
+		a.Get("foo"),                // namespace为application中配置项foo的value
+		a.GetNameSpace("test.json"), // namespace为test.json的所有配置项
+		a.Get("foo", agollo.WithDefault("bar")), // foo这个key不存在时返回bar
+		a.Get("foo", agollo.WithNamespace("bar")), // namespace为bar, key为foo的value
 	)
 }
 ```
