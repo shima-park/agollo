@@ -28,8 +28,8 @@ func main(){
 	}
 
 	fmt.Println(
-		a.Get("foo"),                // your_appid下namespace为application中的一个配置项foo
-		a.GetNameSpace("test.json"), // your_appid下namespace为test.json的所有配置项
+		a.Get("foo"),                // 获取your_appid下namespace为application中配置项foo的value
+		a.GetNameSpace("test.json"), // 获取your_appid下namespace为test.json的所有配置项
 	)
 }
 ```
