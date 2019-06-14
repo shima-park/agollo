@@ -1,5 +1,11 @@
 # Agollo - Go Client for Apollo
 
+[![golang](https://img.shields.io/badge/Language-Go-green.svg?style=flat)](https://golang.org)
+[![GoDoc](http://godoc.org/github.com/shima-park/agollo?status.svg)](http://godoc.org/github.com/shima-park/agollo)
+[![GitHub release](https://img.shields.io/github/release/shima-park/agollo.svg)](https://github.com/shima-park/agollo/releases)
+[![codebeat badge](https://codebeat.co/badges/bc2009d6-84f1-4f11-803e-fc571a12a1c0)](https://codebeat.co/projects/github-com-shima-park-agollo-master)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 携程Apollo Golang版客户端
 
 ## 快速开始
@@ -82,7 +88,7 @@ case resp := <-watchCh:
 初始化时增加agollo.FailTolerantOnBackupExists()即可，
 在连接apollo失败时，如果在配置的目录下存在.agollo备份配置，会读取备份在服务器无法连接的情况下
 ```
-a, err := agollo.New("localhost:8080", "your_appid", 
+a, err := agollo.New("localhost:8080", "your_appid",
 		agollo.FailTolerantOnBackupExists(),
 		// other options...
 	)
@@ -92,7 +98,7 @@ a, err := agollo.New("localhost:8080", "your_appid",
 ### 支持多namespace
 初始化时增加agollo.AutoFetchOnCacheMiss() 当本地缓存中namespace不存在时，尝试去apollo缓存接口去获取
 ```
-a, err := agollo.New("localhost:8080", "your_appid", 
+a, err := agollo.New("localhost:8080", "your_appid",
 		agollo.AutoFetchOnCacheMiss(),
 		// other options...
 	)
@@ -106,9 +112,9 @@ a.Get("foo", agollo.WithNamespace("Namespace_B"))
 // ...
 ```
 
-或者初始化时增加agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...)预加载这几个namesapce的配置  
+或者初始化时增加agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...)预加载这几个namesapce的配置
 ```
-a, err := agollo.New("localhost:8080", "your_appid", 
+a, err := agollo.New("localhost:8080", "your_appid",
 		agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),
 		// other options...
 	)
@@ -117,7 +123,7 @@ a, err := agollo.New("localhost:8080", "your_appid",
 
 当然两者结合使用也是可以的。
 ```
-a, err := agollo.New("localhost:8080", "your_appid", 
+a, err := agollo.New("localhost:8080", "your_appid",
 		agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),
 		agollo.AutoFetchOnCacheMiss(),
 		// other options...
@@ -128,18 +134,18 @@ a, err := agollo.New("localhost:8080", "your_appid",
 ### 如何支持多cluster
 初始化时增加agollo.Cluster("your_cluster")，并创建多个Agollo接口实例[issue](https://github.com/shima-park/agollo/issues/1)
 ```
-cluster_a, err := agollo.New("localhost:8080", "your_appid", 
+cluster_a, err := agollo.New("localhost:8080", "your_appid",
 		agollo.Cluster("cluster_a"),
 		agollo.AutoFetchOnCacheMiss(),
 		// other options...
 	)
 
-cluster_b, err := agollo.New("localhost:8080", "your_appid", 
+cluster_b, err := agollo.New("localhost:8080", "your_appid",
 		agollo.Cluster("cluster_b"),
 		agollo.AutoFetchOnCacheMiss(),
 		// other options...
 	)
-	
+
 cluster_a.Get("foo")
 cluster_b.Get("foo")
 // ...
@@ -150,7 +156,7 @@ cluster_b.Get("foo")
 三种package级别初始化，影响默认对象和package提供的静态方法。适用于不做对象传递，单一AppID的场景
 ```
 // 读取当前目录下app.properties，适用于原始apollo定义的读取固定配置文件同学
-agollo.InitWithDefaultConfigFile(opts ...Option) error  
+agollo.InitWithDefaultConfigFile(opts ...Option) error
 
 agollo.Init(configServerURL, appID string, opts ...Option) (err error)
 
@@ -168,26 +174,26 @@ agollo.NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error)
 更多配置请见[options.go](https://github.com/shima-park/agollo/blob/master/options.go)
 ```
         // 打印日志，打印日志注入有效的io.Writer，默认: ioutil.Discard
-	agollo.WithLogger(agollo.NewLogger(agollo.LoggerWriter(os.Stdout))), 
-	
+	agollo.WithLogger(agollo.NewLogger(agollo.LoggerWriter(os.Stdout))),
+
 	// 默认的集群名称，默认：default
 	agollo.Cluster(cluster),
-	
+
 	// 预先加载的namespace列表，如果是通过配置启动，会在app.properties配置的基础上追加
-	agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),                          
-	
+	agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),
+
 	// 在配置未找到时，去apollo的带缓存的获取配置接口，获取配置
-	agollo.AutoFetchOnCacheMiss(),                                
-	
+	agollo.AutoFetchOnCacheMiss(),
+
 	// 备份文件存放地址，默认：当前目录下/.agollo，一般结合FailTolerantOnBackupExists使用
-	agollo.BackupFile("/tmp/xxx/.agollo")                            
+	agollo.BackupFile("/tmp/xxx/.agollo")
 	// 在连接apollo失败时，如果在配置的目录下存在.agollo备份配置，会读取备份在服务器无法连接的情况下
-	agollo.FailTolerantOnBackupExists(),            
+	agollo.FailTolerantOnBackupExists(),
 )
 ```
 
 ### 详细特性展示
-请将example/sample下app.properties修改为你本地或者测试的apollo配置。  
+请将example/sample下app.properties修改为你本地或者测试的apollo配置。
 [示例代码](https://github.com/shima-park/agollo/blob/master/examples/sample/main.go)
 
 ## 结合viper使用，提高配置读取舒适度
@@ -201,7 +207,7 @@ database.timeout = 5s
 // ...
 ```
 
-示例代码:  
+示例代码:
 ```
 import (
     "fmt"
@@ -236,23 +242,23 @@ func main(){
     err = v.Unmarshal(&conf)
     // error handle...
     fmt.Printf("%+v\n", conf)
-    
+
     // 各种基础类型配置项读取
     fmt.Println("Host:", v.GetString("db.host"))
     fmt.Println("Port:", v.GetInt("db.port"))
     fmt.Println("Timeout:", v.GetDuration("db.timeout"))
-    
+
     // 获取所有key，所有配置
     fmt.Println("AllKeys", v.AllKeys(), "AllSettings",  v.AllSettings())
 }
 ```
 
-如果碰到panic: codecgen version mismatch: current: 8, need 10这种错误，详情请见[issue](https://github.com/shima-park/agollo/issues/14)  
-解决办法是将etcd升级到3.3.13: 
+如果碰到panic: codecgen version mismatch: current: 8, need 10这种错误，详情请见[issue](https://github.com/shima-park/agollo/issues/14)
+解决办法是将etcd升级到3.3.13:
 ```
 // 使用go module管理依赖包，使用如下命令更新到此版本，或者更高版本
 go get github.com/coreos/etcd@v3.3.13+incompatible
-```  
+```
 
 ## License
 
