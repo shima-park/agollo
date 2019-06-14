@@ -12,7 +12,7 @@ go get -u github.com/shima-park/agollo
 * 实时同步配置
 * 配置文件容灾
 * 零依赖
-* 支持多namespace
+* 支持多namespace, cluster
 * 提供Viper配置库的apollo插件
 
 ## 示例
@@ -26,12 +26,18 @@ func main(){
 		panic(err)
 	}
 
-        // 获取your_appid下
 	fmt.Println(
-		a.Get("foo"),                // namespace为application中配置项foo的value
-		a.GetNameSpace("test.json"), // namespace为test.json的所有配置项
-		a.Get("foo", agollo.WithDefault("bar")), // foo这个key不存在时返回bar
-		a.Get("foo", agollo.WithNamespace("other_namespace")), // namespace为other_namespace, key为foo的value
+		// 配置项foo的value
+		a.Get("foo"),                
+		
+		// namespace为test.json的所有配置项
+		a.GetNameSpace("test.json"),
+		
+		// 默认值
+		a.Get("foo", agollo.WithDefault("bar")), 
+		
+		// namespace为other_namespace, key为foo的value
+		a.Get("foo", agollo.WithNamespace("other_namespace")), 
 	)
 }
 ```
@@ -133,15 +139,17 @@ cluster_b.Get("foo")
 
 ### 初始化方式
 
-package级别初始化，影响默认对象和package提供的静态方法。适用于不做对象传递，单一AppID的场景
+三种package级别初始化，影响默认对象和package提供的静态方法。适用于不做对象传递，单一AppID的场景
 ```
-agollo.Init(configServerURL, appID string, opts ...Option) (err error)
-agollo.InitWithConfigFile(configFilePath string, opts ...Option) (err error)
 // 读取当前目录下app.properties，适用于原始apollo定义的读取固定配置文件同学
 agollo.InitWithDefaultConfigFile(opts ...Option) error  
+
+agollo.Init(configServerURL, appID string, opts ...Option) (err error)
+
+agollo.InitWithConfigFile(configFilePath string, opts ...Option) (err error)
 ```
 
-新建对象初始化，返回独立的Agollo接口对象。互相之间不会影响，适用于多AppID，Cluser, ConfigServer配置读取
+两种新建对象初始化方法。返回独立的Agollo接口对象。互相之间不会影响，适用于多AppID，Cluser, ConfigServer配置读取
 [issue](https://github.com/shima-park/agollo/issues/1)
 ```
 agollo.New(configServerURL, appID string, opts ...Option) (Agollo, error)
@@ -231,7 +239,7 @@ func main(){
 }
 ```
 
-如果碰到panic: codecgen version mismatch: current: 8, need 10这中错误，详情请见[issue](https://github.com/shima-park/agollo/issues/14)  
+如果碰到panic: codecgen version mismatch: current: 8, need 10这种错误，详情请见[issue](https://github.com/shima-park/agollo/issues/14)  
 解决办法是将etcd升级到3.3.13: 
 ```
 // 使用go module管理依赖包，使用如下命令更新到此版本，或者更高版本
