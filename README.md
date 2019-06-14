@@ -1,7 +1,5 @@
 # Agollo - Go Client for Apollo
-================
 
-# agollo
 携程Apollo Golang版客户端
 
 ## 快速开始
