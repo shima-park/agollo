@@ -41,8 +41,8 @@ func main() {
 		// namespace为test.json的所有配置项
 		a.GetNameSpace("test.json"),
 
-		// 默认值
-		a.Get("foo", agollo.WithDefault("bar")),
+		// 默认值, 为xxx提供一个默认bar
+		a.Get("xxx", agollo.WithDefault("bar")),
 
 		// namespace为other_namespace, key为foo的value
 		a.Get("foo", agollo.WithNamespace("other_namespace")),
