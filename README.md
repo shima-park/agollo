@@ -17,7 +17,7 @@ go get -u github.com/shima-park/agollo
 
 ## 示例
 
-### 简单示例
+### 读取配置
 此示例场景适用于程序启动时读取一次。不会额外启动goroutine同步配置
 ```
 func main(){
@@ -36,15 +36,22 @@ func main(){
 }
 ```
 
-### 配置同步
+### 实时同步配置
 启动一个goroutine实时同步配置, errorCh返回notifications/v2非httpcode(200)的错误信息
 ```
+a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
+// error handle...
+
 errorCh := a.Start()
 // 或者忽略错误处理直接 a.Start()
 ```
+
 ### 配置监听
 监听所有namespace配置变更事件
 ```
+a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
+// error handle...
+
 watchCh := a.Watch()
 
 ...
@@ -56,6 +63,72 @@ case resp := <-watchCh:
 		    "Error:", resp.Error,
 		)
 ...
+```
+### 配置文件容灾
+初始化时增加agollo.FailTolerantOnBackupExists()即可，
+在连接apollo失败时，如果在配置的目录下存在.agollo备份配置，会读取备份在服务器无法连接的情况下
+```
+a, err := agollo.New("localhost:8080", "your_appid", 
+		agollo.FailTolerantOnBackupExists(),
+		// other options...
+	)
+// error handle...
+```
+
+### 支持多namespace
+初始化时增加agollo.AutoFetchOnCacheMiss() 当本地缓存中namespace不存在时，尝试去apollo缓存接口去获取
+```
+a, err := agollo.New("localhost:8080", "your_appid", 
+		agollo.AutoFetchOnCacheMiss(),
+		// other options...
+	)
+// error handle...
+
+appNS, aNS, bNS := a.GetNameSpace("application"), a.GetNameSpace("Namespace_A"), a.GetNameSpace("Namespace_B")
+
+a.Get("foo") // 默认从application这个namespace中查找配置项
+a.Get("foo", agollo.WithNamespace("Namespace_A"))
+a.Get("foo", agollo.WithNamespace("Namespace_B"))
+// ...
+```
+
+或者初始化时增加agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...)预加载这几个namesapce的配置  
+```
+a, err := agollo.New("localhost:8080", "your_appid", 
+		agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),
+		// other options...
+	)
+// error handle...
+```
+
+当然两者结合使用也是可以的。
+```
+a, err := agollo.New("localhost:8080", "your_appid", 
+		agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),
+		agollo.AutoFetchOnCacheMiss(),
+		// other options...
+	)
+// error handle...
+```
+
+### 如何支持多cluster
+初始化时增加agollo.Cluster("your_cluster")，并创建多个Agollo接口实例[issue](https://github.com/shima-park/agollo/issues/1)
+```
+cluster_a, err := agollo.New("localhost:8080", "your_appid", 
+		agollo.Cluster("cluster_a"),
+		agollo.AutoFetchOnCacheMiss(),
+		// other options...
+	)
+
+cluster_b, err := agollo.New("localhost:8080", "your_appid", 
+		agollo.Cluster("cluster_b"),
+		agollo.AutoFetchOnCacheMiss(),
+		// other options...
+	)
+	
+cluster_a.Get("foo")
+cluster_b.Get("foo")
+// ...
 ```
 
 ### 初始化方式
@@ -138,14 +211,14 @@ func main(){
     v := viper.New()
     v.SetConfigType("prop") // 根据namespace实际格式设置对应type
     err := v.AddRemoteProvider("apollo", "your_apollo_endpoint", "your_apollo_namespace")
-    // ... error handle
+    // error handle...
     err = v.ReadRemoteConfig()
-    // ... error handle
+    // error handle...
 
     // 直接反序列化到结构体中
     var conf Config
     err = v.Unmarshal(&conf)
-    // ... error handle
+    // error handle...
     fmt.Printf("%+v\n", conf)
     
     // 各种基础类型配置项读取
