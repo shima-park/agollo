@@ -122,7 +122,7 @@ database.timeout = 5s
 // ...
 ```
 
-示例代码:
+示例代码:  
 ```
 import (
     "fmt"
@@ -167,6 +167,13 @@ func main(){
     fmt.Println("AllKeys", v.AllKeys(), "AllSettings",  v.AllSettings())
 }
 ```
+
+如果碰到panic: codecgen version mismatch: current: 8, need 10这中错误，详情请见[issue](https://github.com/shima-park/agollo/issues/14)  
+解决办法是将etcd升级到3.3.13: 
+```
+// 使用go module管理依赖包，使用如下命令更新到此版本，或者更高版本
+go get github.com/coreos/etcd@v3.3.13+incompatible
+```  
 
 ## License
 
