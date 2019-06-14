@@ -24,7 +24,10 @@ func (pe ConfigParseError) Error() string {
 
 func UnmarshalReader(in io.Reader, c map[string]interface{}, configType string) error {
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(in)
+	_, err := buf.ReadFrom(in)
+	if err != nil {
+		return err
+	}
 
 	switch strings.ToLower(configType) {
 	case "yaml", "yml":
@@ -38,7 +41,7 @@ func UnmarshalReader(in io.Reader, c map[string]interface{}, configType string) 
 		}
 
 	case "hcl":
-		obj, err := hcl.Parse(string(buf.Bytes()))
+		obj, err := hcl.Parse(buf.String())
 		if err != nil {
 			return ConfigParseError{err}
 		}
@@ -57,9 +60,8 @@ func UnmarshalReader(in io.Reader, c map[string]interface{}, configType string) 
 		}
 
 	case "properties", "props", "prop":
-		prop := properties.NewProperties()
-		var err error
-		if prop, err = properties.Load(buf.Bytes(), properties.UTF8); err != nil {
+		prop, err := properties.Load(buf.Bytes(), properties.UTF8)
+		if err != nil {
 			return ConfigParseError{err}
 		}
 		for _, key := range prop.Keys() {

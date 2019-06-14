@@ -19,7 +19,10 @@ type Options struct {
 }
 
 func newOptions(opts ...Option) Options {
-	var options Options
+	var options = Options{
+		AutoFetchOnCacheMiss:       defaultAutoFetchOnCacheMiss,
+		FailTolerantOnBackupExists: defaultFailTolerantOnBackupExists,
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}

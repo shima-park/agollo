@@ -37,6 +37,9 @@ func MarshalWriter(w io.Writer, c map[string]interface{}, configType string) err
 
 	case "hcl":
 		b, err := json.Marshal(c)
+		if err != nil {
+			return ConfigMarshalError{err}
+		}
 		ast, err := hcl.Parse(string(b))
 		if err != nil {
 			return ConfigMarshalError{err}

@@ -2,7 +2,6 @@ package remote
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -10,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/shima-park/agollo"
 	"github.com/spf13/viper"
 	crypt "github.com/xordataexchange/crypt/config"
-	"github.com/shima-park/agollo"
 )
 
 var (
@@ -43,8 +42,7 @@ type viperConfigManager interface {
 }
 
 type apolloConfigManager struct {
-	keystore []byte
-	agollo   agollo.Agollo
+	agollo agollo.Agollo
 }
 
 func newApolloConfigManager(appid, endpoint string) (*apolloConfigManager, error) {
@@ -106,30 +104,8 @@ func (cm apolloConfigManager) Get(namespace string) ([]byte, error) {
 	return buff.Bytes(), err
 }
 
-// 当viper使用远端配置中心时，例如consul, etcd. apollo
-// 通过Get获取map[string]interface{}，并尝试递归每个value
-// 当存储为原始的string时，对应数组等类型会获取失败
-// 所以这里尝试将每个json string还原成go的类型再存储给viper的配置
-func resolveValueToGoInterface(configType string, val interface{}) interface{} {
-	switch configType {
-	case "json":
-		var i interface{}
-		err := json.Unmarshal([]byte(val.(string)), &i)
-		if err == nil {
-			// 支持的类型
-			// bool "true"
-			// float64 "1.11"
-			// string "\"aaa\""
-			// []interface {} "[\"./log/\", \"stdout\"]"
-			// map[string]interface {} "{\"a\":\"a\"}"
-			val = i
-		}
-	}
-	return val
-}
-
 func (cm apolloConfigManager) Watch(namespace string, stop chan bool) <-chan *viper.RemoteResponse {
-	resp := make(chan *viper.RemoteResponse, 0)
+	resp := make(chan *viper.RemoteResponse)
 	backendResp := cm.agollo.WatchNamespace(namespace, stop)
 	go func() {
 		for {
@@ -244,10 +220,10 @@ func (rc configProvider) WatchChannel(rp viper.RemoteProvider) (<-chan *viper.Re
 func getConfigManager(rp viper.RemoteProvider) (interface{}, error) {
 	if rp.SecretKeyring() != "" {
 		kr, err := os.Open(rp.SecretKeyring())
-		defer kr.Close()
 		if err != nil {
 			return nil, err
 		}
+		defer kr.Close()
 
 		switch rp.Provider() {
 		case "etcd":

@@ -200,8 +200,8 @@ func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *Apollo
 	watchCh, exists := a.watchNamespaceChMap.LoadOrStore(namespace, make(chan *ApolloResponse))
 	if !exists {
 		go func(stop chan bool) {
-			select {
-			case <-stop:
+			if stop != nil {
+				<-stop
 				a.watchNamespaceChMap.Delete(namespace)
 			}
 		}(stop)
