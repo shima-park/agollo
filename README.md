@@ -1,11 +1,14 @@
 # Agollo - Go Client for Apollo
+
+[![Build Status](https://travis-ci.org/shima-park/agollo.svg?branch=master)](https://travis-ci.org/shima-park/agollo)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shima-park/agollo)](https://goreportcard.com/report/github.com/shima-park/agollo)
+[![GolangCI](https://golangci.com/badges/github.com/shima-park/agollo.svg)](https://golangci.com)
+[![codebeat badge](https://codebeat.co/badges/bc2009d6-84f1-4f11-803e-fc571a12a1c0)](https://codebeat.co/projects/github-com-shima-park-agollo-master)
 [![golang](https://img.shields.io/badge/Language-Go-green.svg?style=flat)](https://golang.org)
 [![GoDoc](http://godoc.org/github.com/shima-park/agollo?status.svg)](http://godoc.org/github.com/shima-park/agollo)
 [![GitHub release](https://img.shields.io/github/release/shima-park/agollo.svg)](https://github.com/shima-park/agollo/releases)
-[![codebeat badge](https://codebeat.co/badges/bc2009d6-84f1-4f11-803e-fc571a12a1c0)](https://codebeat.co/projects/github-com-shima-park-agollo-master)
-[![Build Status](https://travis-ci.org/shima-park/agollo.svg?branch=master)](https://travis-ci.org/shima-park/agollo)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
+  
 携程Apollo Golang版客户端
 
 ## 快速开始
