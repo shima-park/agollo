@@ -20,24 +20,32 @@ go get -u github.com/shima-park/agollo
 ### 读取配置
 此示例场景适用于程序启动时读取一次。不会额外启动goroutine同步配置
 ```
-func main(){
-    a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
+package main
+
+import (
+	"fmt"
+
+	"github.com/shima-park/agollo"
+)
+
+func main() {
+	a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Println(
 		// 配置项foo的value
-		a.Get("foo"),                
-		
+		a.Get("foo"),
+
 		// namespace为test.json的所有配置项
 		a.GetNameSpace("test.json"),
-		
+
 		// 默认值
-		a.Get("foo", agollo.WithDefault("bar")), 
-		
+		a.Get("foo", agollo.WithDefault("bar")),
+
 		// namespace为other_namespace, key为foo的value
-		a.Get("foo", agollo.WithNamespace("other_namespace")), 
+		a.Get("foo", agollo.WithNamespace("other_namespace")),
 	)
 }
 ```
