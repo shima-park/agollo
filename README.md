@@ -276,7 +276,7 @@ go get github.com/coreos/etcd@v3.3.13+incompatible
     for {
 	time.Sleep(10 * time.Second)
 
-	err := app.WatchRemoteConfig()
+	err := app.WatchRemoteConfig() // 每次调用该方法，会从apollo缓存接口获取一次配置，并更新viper
 	if err != nil {
 		panic(err)
 	}
