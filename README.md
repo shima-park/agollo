@@ -263,6 +263,44 @@ func main(){
 go get github.com/coreos/etcd@v3.3.13+incompatible
 ```
 
+### viper配置同步
+基于轮训的配置同步
+```
+    app := viper.New()
+    app.SetConfigType("prop")
+    err := v.AddRemoteProvider("apollo", "your_apollo_endpoint", "your_apollo_namespace")
+    // error handle...
+    err = v.ReadRemoteConfig()
+    // error handle...
+
+    for {
+	time.Sleep(10 * time.Second)
+
+	err := app.WatchRemoteConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("app.AllSettings:", app.AllSettings())
+     }
+```
+基于事件监听配置同步
+```
+    app := viper.New()
+    app.SetConfigType("prop")
+    err := v.AddRemoteProvider("apollo", "your_apollo_endpoint", "your_apollo_namespace")
+    // error handle...
+    err = v.ReadRemoteConfig()
+    // error handle...
+
+    app.WatchRemoteConfigOnChannel() // 启动一个goroutine来同步配置更改
+
+    for {
+	time.Sleep(1 * time.Second)
+	fmt.Println("app.AllSettings:", app.AllSettings())
+     }
+```
+
 ## License
 
 The project is licensed under the [Apache 2 license](https://github.com/shima-park/agollo/blob/master/LICENSE).
