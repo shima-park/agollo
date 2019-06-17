@@ -86,10 +86,12 @@ func newAgollo(appid, endpoint string) (agollo.Agollo, error) {
 
 func (cm apolloConfigManager) Get(namespace string) ([]byte, error) {
 	configs := cm.agollo.GetNameSpace(namespace)
-	configType := getConfigType(namespace)
+	return marshalSettings(getConfigType(namespace), configs)
+}
+
+func marshalSettings(configType string, configs map[string]interface{}) ([]byte, error) {
 	buff := bytes.NewBuffer(nil)
 	settings := map[string]interface{}{}
-
 	switch configType {
 	case "json", "yml", "yaml", "xml":
 		content := configs["content"].(string)
@@ -121,12 +123,9 @@ func (cm apolloConfigManager) Watch(namespace string, stop chan bool) <-chan *vi
 					continue
 				}
 
-				buff := bytes.NewBuffer(nil)
+				configType := getConfigType(namespace)
+				value, err := marshalSettings(configType, r.NewValue)
 
-				// TODO 如何推断或者获取当前viper当前的config type
-				// 默认用json
-				err := MarshalWriter(buff, r.NewValue, getConfigType(namespace))
-				value := buff.Bytes()
 				resp <- &viper.RemoteResponse{Value: value, Error: err}
 			}
 		}

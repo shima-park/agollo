@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spf13/viper"
 	"github.com/shima-park/agollo/viper-remote"
+	"github.com/spf13/viper"
 )
 
 func main() {
@@ -29,26 +29,41 @@ func main() {
 
 	fmt.Println("viper.SupportedRemoteProviders:", viper.SupportedRemoteProviders)
 
-	fmt.Println("app.AllKeys:", app.AllKeys())
-	fmt.Println("test.AllKeys:", test.AllKeys())
+	fmt.Println("app.AllSettings:", app.AllSettings())
+	fmt.Println("test.AllSettings:", test.AllSettings())
 
 	fmt.Println("Get name in app's namespace(applicatoin):", app.Get("Name"))
 	fmt.Println("Get go in test's namespace(TEST.Namespace1):", test.Get("go"))
 
-	for {
-		time.Sleep(1 * time.Second)
+	isLazySync := true
 
-		err := app.WatchRemoteConfig()
-		if err != nil {
-			panic(err)
+	if isLazySync {
+		// 基于轮训的配置同步
+		for {
+			time.Sleep(1 * time.Second)
+
+			err := app.WatchRemoteConfig()
+			if err != nil {
+				panic(err)
+			}
+
+			err = test.WatchRemoteConfig()
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Println("app.AllSettings:", app.AllSettings())
+			fmt.Println("test.AllSettings:", test.AllSettings())
 		}
-
-		err = test.WatchRemoteConfig()
-		if err != nil {
-			panic(err)
+	} else {
+		// 启动一个goroutine来同步配置更改
+		app.WatchRemoteConfigOnChannel()
+		test.WatchRemoteConfigOnChannel()
+		for {
+			time.Sleep(1 * time.Second)
+			fmt.Println("app.AllSettings:", app.AllSettings())
+			fmt.Println("test.AllSettings:", test.AllSettings())
 		}
-
-		fmt.Println("Get name in app's namespace(applicatoin):", app.Get("Name"))
-		fmt.Println("Get go in test's namespace(TEST.Namespace1):", test.Get("go"))
 	}
+
 }
