@@ -18,14 +18,22 @@ var (
 	ErrUnsupportedProvider = errors.New("This configuration manager is not supported")
 
 	_ viperConfigManager = apolloConfigManager{}
-	// apollod的appid
-	appID string
-	// 默认为json，因为远程读出来的是数据流，viper并不知道是什么类型的配置文件，所以需要设置配置文件类型，来进行反序列化
-	defaultConfigType = "properties"
 	// getConfigManager方法每次返回新对象导致缓存无效，
 	// 这里通过endpoint作为key复一个对象
 	// key: endpoint value: agollo.Agollo
 	agolloMap sync.Map
+)
+
+var (
+	// apollod的appid
+	appID string
+	// 默认为properties，apollo默认配置文件格式
+	defaultConfigType = "properties"
+	// 默认创建Agollo的Option
+	defaultAgolloOptions = []agollo.Option{
+		agollo.AutoFetchOnCacheMiss(),
+		agollo.FailTolerantOnBackupExists(),
+	}
 )
 
 func SetAppID(appid string) {
@@ -34,6 +42,10 @@ func SetAppID(appid string) {
 
 func SetConfigType(ct string) {
 	defaultConfigType = ct
+}
+
+func SetAgolloOptions(opts ...agollo.Option) {
+	defaultAgolloOptions = opts
 }
 
 type viperConfigManager interface {
@@ -45,12 +57,12 @@ type apolloConfigManager struct {
 	agollo agollo.Agollo
 }
 
-func newApolloConfigManager(appid, endpoint string) (*apolloConfigManager, error) {
-	if appID == "" {
+func newApolloConfigManager(appid, endpoint string, opts []agollo.Option) (*apolloConfigManager, error) {
+	if appid == "" {
 		return nil, errors.New("The appid is not set")
 	}
 
-	ag, err := newAgollo(appid, endpoint)
+	ag, err := newAgollo(appid, endpoint, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -61,20 +73,19 @@ func newApolloConfigManager(appid, endpoint string) (*apolloConfigManager, error
 
 }
 
-func newAgollo(appid, endpoint string) (agollo.Agollo, error) {
+func newAgollo(appid, endpoint string, opts []agollo.Option) (agollo.Agollo, error) {
 	i, found := agolloMap.Load(endpoint)
 	if !found {
 		ag, err := agollo.New(
 			endpoint,
 			appid,
-			agollo.AutoFetchOnCacheMiss(),
-			agollo.FailTolerantOnBackupExists(),
+			opts...,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		// TODO 监听apollo配置变化，同步配置，不关闭也没问题?
+		// 监听并同步apollo配置
 		ag.Start()
 
 		agolloMap.Store(endpoint, ag)
@@ -241,7 +252,7 @@ func getConfigManager(rp viper.RemoteProvider) (interface{}, error) {
 		case "consul":
 			return crypt.NewStandardConsulConfigManager([]string{rp.Endpoint()})
 		case "apollo":
-			return newApolloConfigManager(appID, rp.Endpoint())
+			return newApolloConfigManager(appID, rp.Endpoint(), defaultAgolloOptions)
 		default:
 			return nil, ErrUnsupportedProvider
 		}
