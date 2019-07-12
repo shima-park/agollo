@@ -36,12 +36,11 @@ type Agollo interface {
 	Options() Options
 }
 
-type Configurations map[string]interface{}
-
 type ApolloResponse struct {
 	Namespace string
 	OldValue  Configurations
 	NewValue  Configurations
+	Changes   Changes
 	Error     error
 }
 
@@ -117,7 +116,8 @@ func NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error) {
 
 func (a *agollo) preload() (Agollo, error) {
 	for _, namespace := range a.opts.PreloadNamespaces {
-		_, err := a.loadConfigFromNonCache(namespace)
+		// The action do not need to notify
+		_, err := a.loadConfigFromNonCache(namespace, false)
 		if err != nil {
 			if a.opts.FailTolerantOnBackupExists {
 				_, err = a.loadBackup(namespace)
@@ -167,7 +167,7 @@ func (a *agollo) loadNameSpace(namespace string) Configurations {
 	a.notificationMap.LoadOrStore(namespace, defaultNotificationID)
 
 	if a.opts.AutoFetchOnCacheMiss {
-		configs, err := a.loadConfigFromCache(namespace)
+		configs, err := a.loadConfigFromCache(namespace, true)
 		if err == nil {
 			a.log("Namesapce", namespace, "From", "cache-api")
 			return configs
@@ -215,6 +215,7 @@ func (a *agollo) sendWatchCh(namespace string, oldVal, newVal Configurations) {
 		Namespace: namespace,
 		OldValue:  oldVal,
 		NewValue:  newVal,
+		Changes:   oldVal.Different(newVal),
 	}
 
 	timer := time.NewTimer(defaultWatchTimeout)
@@ -268,7 +269,7 @@ func (a *agollo) log(kvs ...interface{}) {
 	)
 }
 
-func (a *agollo) loadConfigFromCache(namespace string) (configurations Configurations, err error) {
+func (a *agollo) loadConfigFromCache(namespace string, isNeedNotify bool) (configurations Configurations, err error) {
 	configurations, err = a.opts.ApolloClient.GetConfigsFromCache(
 		a.opts.ConfigServerURL,
 		a.opts.AppID,
@@ -279,12 +280,12 @@ func (a *agollo) loadConfigFromCache(namespace string) (configurations Configura
 		return
 	}
 
-	err = a.handleConfig(namespace, configurations)
+	err = a.handleConfig(namespace, configurations, isNeedNotify)
 
 	return
 }
 
-func (a *agollo) loadConfigFromNonCache(namespace string) (configurations Configurations, err error) {
+func (a *agollo) loadConfigFromNonCache(namespace string, isNeedNotify bool) (configurations Configurations, err error) {
 
 	var (
 		status              int
@@ -306,21 +307,23 @@ func (a *agollo) loadConfigFromNonCache(namespace string) (configurations Config
 	if status == http.StatusOK {
 		configurations = config.Configurations
 		a.namespaceMap.Store(namespace, config.ReleaseKey)
-		err = a.handleConfig(namespace, config.Configurations)
+		err = a.handleConfig(namespace, config.Configurations, isNeedNotify)
 		return
 	}
 
 	return
 }
 
-func (a *agollo) handleConfig(namespace string, configurations Configurations) error {
+func (a *agollo) handleConfig(namespace string, configurations Configurations, isNeedNotify bool) error {
 	// 读取旧缓存用来给监听队列
 	oldValue := a.GetNameSpace(namespace)
 	// 覆盖旧缓存
 	a.cache.Store(namespace, configurations)
 
-	// 发送到监听channel
-	a.sendWatchCh(namespace, oldValue, configurations)
+	if isNeedNotify {
+		// 发送到监听channel
+		a.sendWatchCh(namespace, oldValue, configurations)
+	}
 	// 备份配置
 	return a.backup()
 }
@@ -385,7 +388,7 @@ func (a *agollo) longPoll() {
 	if status == http.StatusOK {
 		// 服务端判断没有改变，不会返回结果,这个时候不需要修改，遍历空数组跳过
 		for _, notification := range notifications {
-			_, err = a.loadConfigFromNonCache(notification.NamespaceName)
+			_, err = a.loadConfigFromNonCache(notification.NamespaceName, true)
 			if err == nil {
 				a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
 				continue
