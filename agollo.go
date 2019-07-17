@@ -71,19 +71,6 @@ type agollo struct {
 	stopLock sync.Mutex
 }
 
-func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
-	a := &agollo{
-		stopCh:   make(chan struct{}),
-		errorsCh: make(chan *LongPollerError),
-		opts:     newOptions(opts...),
-	}
-
-	a.opts.ConfigServerURL = normalizeURL(configServerURL)
-	a.opts.AppID = appID
-
-	return a.preload()
-}
-
 func NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error) {
 	f, err := os.Open(configFilePath)
 	if err != nil {
@@ -114,22 +101,100 @@ func NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error) {
 	)
 }
 
+func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
+	a := &agollo{
+		stopCh:   make(chan struct{}),
+		errorsCh: make(chan *LongPollerError),
+		opts:     newOptions(opts...),
+	}
+
+	a.opts.ConfigServerURL = normalizeURL(configServerURL)
+	a.opts.AppID = appID
+
+	return a.preload()
+}
+
 func (a *agollo) preload() (Agollo, error) {
 	for _, namespace := range a.opts.PreloadNamespaces {
-		// The action do not need to notify
-		_, err := a.loadConfigFromNonCache(namespace, false)
+		_, err := a.initNamespace(namespace)
 		if err != nil {
-			if a.opts.FailTolerantOnBackupExists {
-				_, err = a.loadBackup(namespace)
-				if err != nil {
-					return nil, err
-				}
-				continue
-			}
 			return nil, err
 		}
 	}
 	return a, nil
+}
+
+func (a *agollo) initNamespace(namespace string) (conf Configurations, err error) {
+	var (
+		status              int
+		config              *Config
+		cachedReleaseKey, _ = a.namespaceMap.LoadOrStore(namespace, "")
+	)
+	status, config, err = a.opts.ApolloClient.GetConfigsFromNonCache(
+		a.opts.ConfigServerURL,
+		a.opts.AppID,
+		a.opts.Cluster,
+		namespace,
+		ReleaseKey(cachedReleaseKey.(string)),
+	)
+	if err != nil || status != http.StatusOK {
+		conf = Configurations{}
+		if a.opts.FailTolerantOnBackupExists {
+			backupConfig, lerr := a.loadBackup(namespace)
+			if lerr == nil {
+				conf = backupConfig
+				err = nil
+			}
+		}
+
+		a.cache.Store(namespace, conf)
+		a.namespaceMap.Store(namespace, cachedReleaseKey.(string))
+		a.notificationMap.Store(namespace, defaultNotificationID)
+
+		return
+	}
+
+	conf = config.Configurations
+	a.cache.Store(namespace, config.Configurations)    // 覆盖旧缓存
+	a.namespaceMap.Store(namespace, config.ReleaseKey) // 存储最新的release_key
+
+	// 备份配置
+	if err = a.backup(); err != nil {
+		return
+	}
+
+	_, found := a.notificationMap.Load(namespace)
+	if !found {
+		err = a.initNamespaceNotification(namespace)
+		if err != nil {
+			a.notificationMap.Store(namespace, defaultNotificationID)
+			return
+		}
+	}
+
+	return
+}
+
+func (a *agollo) initNamespaceNotification(namespace string) error {
+	_, notifications, err := a.opts.ApolloClient.Notifications(
+		a.opts.ConfigServerURL,
+		a.opts.AppID,
+		a.opts.Cluster,
+		[]Notification{
+			Notification{
+				NamespaceName:  namespace,
+				NotificationID: defaultNotificationID,
+			},
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, notification := range notifications {
+		a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
+	}
+	return nil
 }
 
 func (a *agollo) Get(key string, opts ...GetOption) string {
@@ -152,40 +217,61 @@ func (a *agollo) Get(key string, opts ...GetOption) string {
 }
 
 func (a *agollo) GetNameSpace(namespace string) Configurations {
-	configs, found := a.cache.LoadOrStore(namespace, Configurations{})
-	if !found {
-		return a.loadNameSpace(namespace)
-	}
-
-	a.log("Namesapce", namespace, "From", "cache")
-
-	return configs.(Configurations)
-}
-
-func (a *agollo) loadNameSpace(namespace string) Configurations {
-	// 存储不存在的namespace, 之后在longPoller中拉取配置
-	a.notificationMap.LoadOrStore(namespace, defaultNotificationID)
-
-	if a.opts.AutoFetchOnCacheMiss {
-		configs, err := a.loadConfigFromCache(namespace, true)
-		if err == nil {
-			a.log("Namesapce", namespace, "From", "cache-api")
-			return configs
+	config, found := a.cache.LoadOrStore(namespace, Configurations{})
+	if !found && a.opts.AutoFetchOnCacheMiss {
+		var err error
+		config, err = a.initNamespace(namespace)
+		if err != nil {
+			a.log("Namespace", namespace, "Action", "GetNameSpace", "Error", err.Error())
 		}
 	}
 
-	if a.opts.FailTolerantOnBackupExists {
-		configs, err := a.loadBackup(namespace)
-		if err == nil {
-			a.log("Namesapce", namespace, "From", "local")
-			return configs
-		}
-	}
-	return Configurations{}
+	return config.(Configurations)
 }
 
 func (a *agollo) Options() Options {
 	return a.opts
+}
+
+// 启动goroutine去轮训apollo通知接口
+func (a *agollo) Start() <-chan *LongPollerError {
+	a.runOnce.Do(func() {
+		go func() {
+			timer := time.NewTimer(a.opts.LongPollerInterval)
+			defer timer.Stop()
+
+			for !a.shouldStop() {
+				select {
+				case <-timer.C:
+					a.longPoll()
+					timer.Reset(a.opts.LongPollerInterval)
+				case <-a.stopCh:
+					return
+				}
+			}
+		}()
+	})
+
+	return a.errorsCh
+}
+
+func (a *agollo) Stop() {
+	a.stopLock.Lock()
+	defer a.stopLock.Unlock()
+	if a.stop {
+		return
+	}
+	a.stop = true
+	close(a.stopCh)
+}
+
+func (a *agollo) shouldStop() bool {
+	select {
+	case <-a.stopCh:
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *agollo) Watch() <-chan *ApolloResponse {
@@ -199,12 +285,23 @@ func (a *agollo) Watch() <-chan *ApolloResponse {
 func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *ApolloResponse {
 	watchCh, exists := a.watchNamespaceChMap.LoadOrStore(namespace, make(chan *ApolloResponse))
 	if !exists {
-		go func(stop chan bool) {
+		go func() {
+			// 非预加载以外的namespace,初始化基础meta信息,否则没有longpoll
+			_, found := a.notificationMap.Load(namespace)
+			if !found {
+				_, err := a.initNamespace(namespace)
+				if err != nil {
+					watchCh.(chan *ApolloResponse) <- &ApolloResponse{
+						Namespace: namespace,
+						Error:     err,
+					}
+				}
+			}
 			if stop != nil {
 				<-stop
 				a.watchNamespaceChMap.Delete(namespace)
 			}
-		}(stop)
+		}()
 	}
 
 	return watchCh.(chan *ApolloResponse)
@@ -252,7 +349,9 @@ func (a *agollo) sendErrorsCh(notifications []Notification, namespace string, er
 	}
 	select {
 	case a.errorsCh <- longPollerError:
+
 	default:
+
 	}
 }
 
@@ -267,65 +366,6 @@ func (a *agollo) log(kvs ...interface{}) {
 			kvs...,
 		)...,
 	)
-}
-
-func (a *agollo) loadConfigFromCache(namespace string, isNeedNotify bool) (configurations Configurations, err error) {
-	configurations, err = a.opts.ApolloClient.GetConfigsFromCache(
-		a.opts.ConfigServerURL,
-		a.opts.AppID,
-		a.opts.Cluster,
-		namespace)
-	if err != nil {
-		a.log("Namespace", namespace, "Action", "LoadConfigFromCache", "Error", err.Error())
-		return
-	}
-
-	err = a.handleConfig(namespace, configurations, isNeedNotify)
-
-	return
-}
-
-func (a *agollo) loadConfigFromNonCache(namespace string, isNeedNotify bool) (configurations Configurations, err error) {
-
-	var (
-		status              int
-		config              *Config
-		cachedReleaseKey, _ = a.namespaceMap.LoadOrStore(namespace, "")
-	)
-	status, config, err = a.opts.ApolloClient.GetConfigsFromNonCache(
-		a.opts.ConfigServerURL,
-		a.opts.AppID,
-		a.opts.Cluster,
-		namespace,
-		ReleaseKey(cachedReleaseKey.(string)),
-	)
-	if err != nil {
-		a.log("Namespace", namespace, "Action", "LoadConfigFromNonCache", "Error", err.Error())
-		return
-	}
-
-	if status == http.StatusOK {
-		configurations = config.Configurations
-		a.namespaceMap.Store(namespace, config.ReleaseKey)
-		err = a.handleConfig(namespace, config.Configurations, isNeedNotify)
-		return
-	}
-
-	return
-}
-
-func (a *agollo) handleConfig(namespace string, configurations Configurations, isNeedNotify bool) error {
-	// 读取旧缓存用来给监听队列
-	oldValue := a.GetNameSpace(namespace)
-	// 覆盖旧缓存
-	a.cache.Store(namespace, configurations)
-
-	if isNeedNotify {
-		// 发送到监听channel
-		a.sendWatchCh(namespace, oldValue, configurations)
-	}
-	// 备份配置
-	return a.backup()
 }
 
 func (a *agollo) backup() error {
@@ -347,7 +387,7 @@ func (a *agollo) backup() error {
 
 func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
 	if _, err := os.Stat(a.opts.BackupFile); err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	data, err := ioutil.ReadFile(a.opts.BackupFile)
@@ -363,7 +403,6 @@ func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
 
 	for namespace, configs := range backup {
 		if namespace == specifyNamespace {
-			a.cache.Store(namespace, configs)
 			return configs, nil
 		}
 	}
@@ -373,12 +412,14 @@ func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
 
 func (a *agollo) longPoll() {
 	notifications := a.notifications()
+
 	status, notifications, err := a.opts.ApolloClient.Notifications(
 		a.opts.ConfigServerURL,
 		a.opts.AppID,
 		a.opts.Cluster,
 		notifications,
 	)
+
 	if err != nil {
 		a.log("Notifications", Notifications(a.notifications()).String(),
 			"Error", err.Error(), "Action", "LongPoll")
@@ -388,9 +429,20 @@ func (a *agollo) longPoll() {
 	if status == http.StatusOK {
 		// 服务端判断没有改变，不会返回结果,这个时候不需要修改，遍历空数组跳过
 		for _, notification := range notifications {
-			_, err = a.loadConfigFromNonCache(notification.NamespaceName, true)
+			// 更新notificationid
+			a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
+
+			// 读取旧缓存用来给监听队列
+			oldValue, _ := a.cache.Load(notification.NamespaceName)
+			// 更新namespace
+			_, err = a.initNamespace(notification.NamespaceName)
 			if err == nil {
-				a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
+				// 读取新缓存用来给监听队列
+				newValue, _ := a.cache.Load(notification.NamespaceName)
+				// 发送到监听channel
+				a.sendWatchCh(notification.NamespaceName,
+					oldValue.(Configurations),
+					newValue.(Configurations))
 				continue
 			} else {
 				a.sendErrorsCh(notifications, notification.NamespaceName, err)
@@ -413,47 +465,6 @@ func (a *agollo) notifications() []Notification {
 		return true
 	})
 	return notifications
-}
-
-// 启动goroutine去轮训apollo通知接口
-func (a *agollo) Start() <-chan *LongPollerError {
-	a.runOnce.Do(func() {
-		go func() {
-			timer := time.NewTimer(a.opts.LongPollerInterval)
-			defer timer.Stop()
-
-			for !a.shouldStop() {
-				select {
-				case <-timer.C:
-					a.longPoll()
-					timer.Reset(a.opts.LongPollerInterval)
-				case <-a.stopCh:
-					return
-				}
-			}
-		}()
-	})
-
-	return a.errorsCh
-}
-
-func (a *agollo) Stop() {
-	a.stopLock.Lock()
-	defer a.stopLock.Unlock()
-	if a.stop {
-		return
-	}
-	a.stop = true
-	close(a.stopCh)
-}
-
-func (a *agollo) shouldStop() bool {
-	select {
-	case <-a.stopCh:
-		return true
-	default:
-		return false
-	}
 }
 
 func Init(configServerURL, appID string, opts ...Option) (err error) {

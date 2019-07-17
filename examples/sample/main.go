@@ -32,12 +32,12 @@ func main() {
 	*/
 
 	// 获取默认配置中cluster=default namespace=application key=Name的值
-	fmt.Println("Name:", agollo.Get("Name"))
+	fmt.Println("timeout:", agollo.Get("timeout"))
 
-	// 获取默认配置中cluster=default namespace=application key=Name的值，提供默认值返回
+	// 获取默认配置中cluster=default namespace=application key=timeout的值，提供默认值返回
 	fmt.Println("YourConfigKey:", agollo.Get("YourConfigKey", agollo.WithDefault("YourDefaultValue")))
 
-	// 获取默认配置中cluster=default namespace=Test.Namespace key=Name的值，提供默认值返回
+	// 获取默认配置中cluster=default namespace=Test.Namespace key=timeout的值，提供默认值返回
 	fmt.Println("YourConfigKey2:", agollo.Get("YourConfigKey2", agollo.WithDefault("YourDefaultValue"), agollo.WithNamespace("YourNamespace")))
 
 	// 获取namespace下的所有配置项
@@ -47,7 +47,7 @@ func main() {
 	// agollo初始化是带上agollo.AutoFetchOnCacheMiss()可选项的话
 	// 陪到非预加载的namespace，会去apollo缓存接口获取配置
 	// 未配置的话会返回空或者传入的默认值选项
-	fmt.Println(agollo.Get("Name", agollo.WithDefault("foo"), agollo.WithNamespace("TEST.Namespace1")))
+	fmt.Println(agollo.Get("timeout", agollo.WithDefault("foo"), agollo.WithNamespace("TEST.Namespace1")))
 
 	// 如果想监听并同步服务器配置变化，启动apollo长轮训
 	// 返回一个期间发生错误的error channel,按照需要去处理
