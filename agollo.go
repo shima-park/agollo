@@ -57,8 +57,9 @@ type agollo struct {
 	opts Options
 
 	notificationMap sync.Map // key: namespace value: notificationId
-	namespaceMap    sync.Map // key: namespace value: releaseKey
+	releaseKeyMap   sync.Map // key: namespace value: releaseKey
 	cache           sync.Map // key: namespace value: Configurations
+	initialized     sync.Map // key: namespace value: bool
 
 	watchCh             chan *ApolloResponse // watch all namespace
 	watchNamespaceChMap sync.Map             // key: namespace value: chan *ApolloResponse
@@ -116,7 +117,7 @@ func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
 
 func (a *agollo) preload() (Agollo, error) {
 	for _, namespace := range a.opts.PreloadNamespaces {
-		_, err := a.initNamespace(namespace)
+		err := a.initNamespace(namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -124,11 +125,22 @@ func (a *agollo) preload() (Agollo, error) {
 	return a, nil
 }
 
-func (a *agollo) initNamespace(namespace string) (conf Configurations, err error) {
+func (a *agollo) initNamespace(namespace string) error {
+	_, found := a.initialized.LoadOrStore(namespace, true)
+	if !found {
+		_, err := a.reloadNamespace(namespace, defaultNotificationID)
+		return err
+	}
+	return nil
+}
+
+func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Configurations, err error) {
+	a.notificationMap.Store(namespace, notificationID)
+
 	var (
 		status              int
 		config              *Config
-		cachedReleaseKey, _ = a.namespaceMap.LoadOrStore(namespace, "")
+		cachedReleaseKey, _ = a.releaseKeyMap.LoadOrStore(namespace, "")
 	)
 	status, config, err = a.opts.ApolloClient.GetConfigsFromNonCache(
 		a.opts.ConfigServerURL,
@@ -148,53 +160,21 @@ func (a *agollo) initNamespace(namespace string) (conf Configurations, err error
 		}
 
 		a.cache.Store(namespace, conf)
-		a.namespaceMap.Store(namespace, cachedReleaseKey.(string))
-		a.notificationMap.Store(namespace, defaultNotificationID)
+		a.releaseKeyMap.Store(namespace, cachedReleaseKey.(string))
 
 		return
 	}
 
 	conf = config.Configurations
-	a.cache.Store(namespace, config.Configurations)    // 覆盖旧缓存
-	a.namespaceMap.Store(namespace, config.ReleaseKey) // 存储最新的release_key
+	a.cache.Store(namespace, config.Configurations)     // 覆盖旧缓存
+	a.releaseKeyMap.Store(namespace, config.ReleaseKey) // 存储最新的release_key
 
 	// 备份配置
 	if err = a.backup(); err != nil {
 		return
 	}
 
-	_, found := a.notificationMap.Load(namespace)
-	if !found {
-		err = a.initNamespaceNotification(namespace)
-		if err != nil {
-			a.notificationMap.Store(namespace, defaultNotificationID)
-			return
-		}
-	}
-
 	return
-}
-
-func (a *agollo) initNamespaceNotification(namespace string) error {
-	_, notifications, err := a.opts.ApolloClient.Notifications(
-		a.opts.ConfigServerURL,
-		a.opts.AppID,
-		a.opts.Cluster,
-		[]Notification{
-			Notification{
-				NamespaceName:  namespace,
-				NotificationID: defaultNotificationID,
-			},
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	for _, notification := range notifications {
-		a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
-	}
-	return nil
 }
 
 func (a *agollo) Get(key string, opts ...GetOption) string {
@@ -219,10 +199,11 @@ func (a *agollo) Get(key string, opts ...GetOption) string {
 func (a *agollo) GetNameSpace(namespace string) Configurations {
 	config, found := a.cache.LoadOrStore(namespace, Configurations{})
 	if !found && a.opts.AutoFetchOnCacheMiss {
-		var err error
-		config, err = a.initNamespace(namespace)
+		err := a.initNamespace(namespace)
 		if err != nil {
 			a.log("Namespace", namespace, "Action", "GetNameSpace", "Error", err.Error())
+		} else {
+			config, _ = a.cache.Load(namespace)
 		}
 	}
 
@@ -287,16 +268,14 @@ func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *Apollo
 	if !exists {
 		go func() {
 			// 非预加载以外的namespace,初始化基础meta信息,否则没有longpoll
-			_, found := a.notificationMap.Load(namespace)
-			if !found {
-				_, err := a.initNamespace(namespace)
-				if err != nil {
-					watchCh.(chan *ApolloResponse) <- &ApolloResponse{
-						Namespace: namespace,
-						Error:     err,
-					}
+			err := a.initNamespace(namespace)
+			if err != nil {
+				watchCh.(chan *ApolloResponse) <- &ApolloResponse{
+					Namespace: namespace,
+					Error:     err,
 				}
 			}
+
 			if stop != nil {
 				<-stop
 				a.watchNamespaceChMap.Delete(namespace)
@@ -308,17 +287,23 @@ func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *Apollo
 }
 
 func (a *agollo) sendWatchCh(namespace string, oldVal, newVal Configurations) {
+	changes := oldVal.Different(newVal)
+	if len(changes) == 0 {
+		return
+	}
+
 	resp := &ApolloResponse{
 		Namespace: namespace,
 		OldValue:  oldVal,
 		NewValue:  newVal,
-		Changes:   oldVal.Different(newVal),
+		Changes:   changes,
 	}
 
 	timer := time.NewTimer(defaultWatchTimeout)
 	for _, watchCh := range a.getWatchChs(namespace) {
 		select {
 		case watchCh <- resp:
+
 		case <-timer.C: // 防止创建全局监听或者某个namespace监听却不消费死锁问题
 			timer.Reset(defaultWatchTimeout)
 		}
@@ -419,7 +404,6 @@ func (a *agollo) longPoll() {
 		a.opts.Cluster,
 		notifications,
 	)
-
 	if err != nil {
 		a.log("Notifications", Notifications(a.notifications()).String(),
 			"Error", err.Error(), "Action", "LongPoll")
@@ -429,21 +413,19 @@ func (a *agollo) longPoll() {
 	if status == http.StatusOK {
 		// 服务端判断没有改变，不会返回结果,这个时候不需要修改，遍历空数组跳过
 		for _, notification := range notifications {
-			// 更新notificationid
-			a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
-
 			// 读取旧缓存用来给监听队列
-			oldValue, _ := a.cache.Load(notification.NamespaceName)
+			oldValue := func() Configurations {
+				v, _ := a.cache.Load(notification.NamespaceName)
+				return v.(Configurations)
+			}()
 			// 更新namespace
-			_, err = a.initNamespace(notification.NamespaceName)
+			newValue, err := a.reloadNamespace(notification.NamespaceName, notification.NotificationID)
+
 			if err == nil {
-				// 读取新缓存用来给监听队列
-				newValue, _ := a.cache.Load(notification.NamespaceName)
 				// 发送到监听channel
 				a.sendWatchCh(notification.NamespaceName,
-					oldValue.(Configurations),
-					newValue.(Configurations))
-				continue
+					oldValue,
+					newValue)
 			} else {
 				a.sendErrorsCh(notifications, notification.NamespaceName, err)
 			}

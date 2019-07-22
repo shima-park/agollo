@@ -114,6 +114,7 @@ func (c *apolloClient) Notifications(configServerURL, appID, cluster string, not
 		url.QueryEscape(cluster),
 		url.QueryEscape(Notifications(notifications).String()),
 	)
+
 	var req *http.Request
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {
