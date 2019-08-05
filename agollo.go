@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -367,7 +368,12 @@ func (a *agollo) backup() error {
 		return err
 	}
 
-	return ioutil.WriteFile(a.opts.BackupFile, data, 0644)
+	err = os.Mkdir(filepath.Dir(a.opts.BackupFile), 0777)
+	if err != nil && !os.IsExist(err) {
+		return err
+	}
+
+	return ioutil.WriteFile(a.opts.BackupFile, data, 0666)
 }
 
 func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
