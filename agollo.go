@@ -368,7 +368,7 @@ func (a *agollo) backup() error {
 		return err
 	}
 
-	err = os.Mkdir(filepath.Dir(a.opts.BackupFile), 0777)
+	err = os.MkdirAll(filepath.Dir(a.opts.BackupFile), 0777)
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
