@@ -424,19 +424,29 @@ func (a *agollo) longPoll() {
 				v, _ := a.cache.Load(notification.NamespaceName)
 				return v.(Configurations)
 			}()
+
+			isSendChange := a.isSendChange(notification.NamespaceName)
+
 			// 更新namespace
 			newValue, err := a.reloadNamespace(notification.NamespaceName, notification.NotificationID)
 
 			if err == nil {
-				// 发送到监听channel
-				a.sendWatchCh(notification.NamespaceName,
-					oldValue,
-					newValue)
+				if isSendChange {
+					// 发送到监听channel
+					a.sendWatchCh(notification.NamespaceName,
+						oldValue,
+						newValue)
+				}
 			} else {
 				a.sendErrorsCh(notifications, notification.NamespaceName, err)
 			}
 		}
 	}
+}
+
+func (a *agollo) isSendChange(namespace string) bool {
+	v, ok := a.notificationMap.Load(namespace)
+	return ok && v.(int) > defaultNotificationID
 }
 
 func (a *agollo) notifications() []Notification {
