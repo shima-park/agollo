@@ -77,17 +77,23 @@ errorCh := a.Start()
 a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
 // error handle...
 
+a.Start()
+
 watchCh := a.Watch()
 
-...
-case resp := <-watchCh:
-		fmt.Println(
-		    "Namesapce:", resp.Namesapce,
-		    "OldValue:", resp.OldValue,
-		    "NewValue:", resp.NewValue,
-		    "Error:", resp.Error,
-		)
-...
+for{
+	select{
+	case err := <- errorCh:
+		// handle error
+	case resp := <-watchCh:
+			fmt.Println(
+			    "Namesapce:", resp.Namesapce,
+			    "OldValue:", resp.OldValue,
+			    "NewValue:", resp.NewValue,
+			    "Error:", resp.Error,
+			)
+	}
+}
 ```
 ### 配置文件容灾
 初始化时增加agollo.FailTolerantOnBackupExists()即可，
