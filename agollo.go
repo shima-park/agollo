@@ -150,8 +150,20 @@ func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Con
 		namespace,
 		ReleaseKey(cachedReleaseKey.(string)),
 	)
+
+	// 服务端未找到namespace时返回404
+	if status == http.StatusNotFound {
+		// fix #23 当需要加载的namespace还未创建时，置为以下状态
+		// 1. notificationMap添加namespace以保证在服务器端的轮训列表中
+		// 2. 且notificationID(0)  > 默认值(-1), 服务端新建完后发送改变事件
+		a.notificationMap.Store(namespace, 0)
+		a.cache.Store(namespace, Configurations{})
+		return
+	}
+
 	if err != nil || status != http.StatusOK {
 		conf = Configurations{}
+		// 异常状况下，如果开启容灾，则读取备份
 		if a.opts.FailTolerantOnBackupExists {
 			backupConfig, lerr := a.loadBackup(namespace)
 			if lerr == nil {
