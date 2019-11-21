@@ -433,7 +433,10 @@ func (a *agollo) longPoll() {
 		for _, notification := range notifications {
 			// 读取旧缓存用来给监听队列
 			oldValue := func() Configurations {
-				v, _ := a.cache.Load(notification.NamespaceName)
+				v, ok := a.cache.Load(notification.NamespaceName)
+				if !ok {
+					return Configurations{}
+				}
 				return v.(Configurations)
 			}()
 
