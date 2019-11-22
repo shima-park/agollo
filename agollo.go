@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -327,6 +328,13 @@ func (a *agollo) getWatchChs(namespace string) []chan *ApolloResponse {
 	var chs []chan *ApolloResponse
 	if a.watchCh != nil {
 		chs = append(chs, a.watchCh)
+	}
+
+	// fix: 传给apollo类似test.properties这种namespace
+	// 通知回来的NamespaceName却没有.properties后缀，修正此问题
+	ext := path.Ext(namespace)
+	if ext == "" {
+		namespace = namespace + "." + defaultConfigType
 	}
 
 	if watchNamespaceCh, found := a.watchNamespaceChMap.Load(namespace); found {
