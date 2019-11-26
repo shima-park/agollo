@@ -4,6 +4,15 @@ import (
 	"time"
 )
 
+var (
+	defaultCluster                    = "default"
+	defaultNamespace                  = "application"
+	defaultBackupFile                 = ".agollo"
+	defaultAutoFetchOnCacheMiss       = false
+	defaultFailTolerantOnBackupExists = false
+	defaultLongPollInterval           = 1 * time.Second
+)
+
 type Options struct {
 	ConfigServerURL            string        // apollo 服务地址
 	AppID                      string        // appid

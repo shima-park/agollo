@@ -12,20 +12,11 @@ import (
 )
 
 var (
-	localIP                           = getLocalIP()
-	defaultConfigFilePath             = "app.properties"
-	defaultCluster                    = "default"
-	defaultNamespace                  = "application"
-	defaultConfigType                 = "properties"
-	defaultBackupFile                 = ".agollo"
-	defaultClientTimeout              = 90 * time.Second
-	defaultNotificationID             = -1
-	defaultLongPollInterval           = 1 * time.Second
-	defaultAutoFetchOnCacheMiss       = false
-	defaultFailTolerantOnBackupExists = false
-	defaultWatchTimeout               = 500 * time.Millisecond
-
-	defaultAgollo Agollo
+	defaultConfigFilePath = "app.properties"
+	defaultConfigType     = "properties"
+	defaultNotificationID = -1
+	defaultWatchTimeout   = 500 * time.Millisecond
+	defaultAgollo         Agollo
 )
 
 type Agollo interface {

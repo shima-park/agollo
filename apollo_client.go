@@ -8,6 +8,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
+)
+
+var (
+	defaultClientTimeout = 90 * time.Second
 )
 
 // https://github.com/ctripcorp/apollo/wiki/%E5%85%B6%E5%AE%83%E8%AF%AD%E8%A8%80%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8E%A5%E5%85%A5%E6%8C%87%E5%8D%97
@@ -96,7 +101,7 @@ func NewApolloClient(opts ...ApolloClientOption) ApolloClient {
 	}
 
 	if c.IP == "" {
-		c.IP = localIP
+		c.IP = getLocalIP()
 	}
 
 	if c.ConfigType == "" {
@@ -115,23 +120,7 @@ func (c *apolloClient) Notifications(configServerURL, appID, cluster string, not
 		url.QueryEscape(Notifications(notifications).String()),
 	)
 
-	var req *http.Request
-	req, err = http.NewRequest("GET", url, nil)
-	if err != nil {
-		return
-	}
-
-	var body []byte
-	status, body, err = parseResponseBody(c.Doer, req)
-	if err != nil {
-		return
-	}
-
-	if status == http.StatusOK {
-		err = json.Unmarshal(body, &result)
-		return
-	}
-
+	status, err = c.do("GET", url, &result)
 	return
 }
 
@@ -150,24 +139,9 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 		options.ReleaseKey,
 		c.IP,
 	)
-	var req *http.Request
-	req, err = http.NewRequest("GET", url, nil)
-	if err != nil {
-		return
-	}
 
-	var body []byte
-	status, body, err = parseResponseBody(c.Doer, req)
-	if err != nil {
-		return
-	}
-
-	if status == http.StatusOK {
-		config = new(Config)
-		err = json.Unmarshal(body, config)
-		return
-	}
-
+	config = new(Config)
+	status, err = c.do("GET", url, config)
 	return
 }
 
@@ -181,27 +155,33 @@ func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, name
 		c.IP,
 	)
 
+	config = make(Configurations)
+	_, err = c.do("GET", url, config)
+	return
+}
+
+func (c *apolloClient) do(method, url string, v interface{}) (status int, err error) {
 	var req *http.Request
-	req, err = http.NewRequest("GET", url, nil)
+	req, err = http.NewRequest(method, url, nil)
 	if err != nil {
 		return
 	}
 
-	var (
-		body   []byte
-		status int
-	)
+	var body []byte
 	status, body, err = parseResponseBody(c.Doer, req)
 	if err != nil {
 		return
 	}
 
-	if status == http.StatusOK {
-		config = make(Configurations)
-		err = json.Unmarshal(body, &config)
-	} else {
+	switch status {
+	case http.StatusOK:
+		err = json.Unmarshal(body, v)
+	case http.StatusNotFound:
+		// do nothing
+	default:
 		err = errors.New(string(body))
 	}
+
 	return
 }
 
