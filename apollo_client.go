@@ -2,7 +2,6 @@ package agollo
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -120,7 +119,13 @@ func (c *apolloClient) Notifications(configServerURL, appID, cluster string, not
 		url.QueryEscape(Notifications(notifications).String()),
 	)
 
-	status, err = c.do("GET", url, &result)
+	status, err = c.do("GET", url, func(status int, body []byte) error {
+		if status == http.StatusOK {
+			return json.Unmarshal(body, &result)
+		}
+		return nil
+	})
+
 	return
 }
 
@@ -141,8 +146,14 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 	)
 
 	config = new(Config)
-	status, err = c.do("GET", url, config)
+	status, err = c.do("GET", url, func(status int, body []byte) error {
+		if status == http.StatusOK {
+			return json.Unmarshal(body, config)
+		}
+		return nil
+	})
 	return
+
 }
 
 func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, namespace string) (config Configurations, err error) {
@@ -156,11 +167,17 @@ func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, name
 	)
 
 	config = make(Configurations)
-	_, err = c.do("GET", url, config)
+	_, err = c.do("GET", url, func(status int, body []byte) error {
+		if status == http.StatusOK {
+			return json.Unmarshal(body, config)
+		}
+		return nil
+	})
+
 	return
 }
 
-func (c *apolloClient) do(method, url string, v interface{}) (status int, err error) {
+func (c *apolloClient) do(method, url string, callback func(status int, body []byte) error) (status int, err error) {
 	var req *http.Request
 	req, err = http.NewRequest(method, url, nil)
 	if err != nil {
@@ -173,15 +190,9 @@ func (c *apolloClient) do(method, url string, v interface{}) (status int, err er
 		return
 	}
 
-	switch status {
-	case http.StatusOK:
-		err = json.Unmarshal(body, v)
-	case http.StatusNotFound:
-		// do nothing
-	default:
-		err = errors.New(string(body))
+	if callback != nil {
+		err = callback(status, body)
 	}
-
 	return
 }
 

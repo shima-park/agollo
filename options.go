@@ -1,6 +1,7 @@
 package agollo
 
 import (
+	"os"
 	"time"
 )
 
@@ -27,13 +28,21 @@ type Options struct {
 	FailTolerantOnBackupExists bool          // 服务器连接失败时允许读取备份，默认：false
 }
 
-func newOptions(opts ...Option) Options {
+func newOptions(configServerURL, appID string, opts ...Option) Options {
 	var options = Options{
+		ConfigServerURL:            configServerURL,
+		AppID:                      appID,
 		AutoFetchOnCacheMiss:       defaultAutoFetchOnCacheMiss,
 		FailTolerantOnBackupExists: defaultFailTolerantOnBackupExists,
 	}
 	for _, opt := range opts {
 		opt(&options)
+	}
+
+	if options.ConfigServerURL == "" {
+		options.ConfigServerURL = normalizeURL(os.Getenv("APOLLO_META"))
+	} else {
+		options.ConfigServerURL = normalizeURL(options.ConfigServerURL)
 	}
 
 	if options.Cluster == "" {
