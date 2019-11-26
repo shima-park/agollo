@@ -119,13 +119,7 @@ func (c *apolloClient) Notifications(configServerURL, appID, cluster string, not
 		url.QueryEscape(Notifications(notifications).String()),
 	)
 
-	status, err = c.do("GET", url, func(status int, body []byte) error {
-		if status == http.StatusOK {
-			return json.Unmarshal(body, &result)
-		}
-		return nil
-	})
-
+	status, err = c.do("GET", url, &result)
 	return
 }
 
@@ -146,12 +140,7 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 	)
 
 	config = new(Config)
-	status, err = c.do("GET", url, func(status int, body []byte) error {
-		if status == http.StatusOK {
-			return json.Unmarshal(body, config)
-		}
-		return nil
-	})
+	status, err = c.do("GET", url, config)
 	return
 
 }
@@ -167,17 +156,11 @@ func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, name
 	)
 
 	config = make(Configurations)
-	_, err = c.do("GET", url, func(status int, body []byte) error {
-		if status == http.StatusOK {
-			return json.Unmarshal(body, config)
-		}
-		return nil
-	})
-
+	_, err = c.do("GET", url, config)
 	return
 }
 
-func (c *apolloClient) do(method, url string, callback func(status int, body []byte) error) (status int, err error) {
+func (c *apolloClient) do(method, url string, v interface{}) (status int, err error) {
 	var req *http.Request
 	req, err = http.NewRequest(method, url, nil)
 	if err != nil {
@@ -190,8 +173,8 @@ func (c *apolloClient) do(method, url string, callback func(status int, body []b
 		return
 	}
 
-	if callback != nil {
-		err = callback(status, body)
+	if status == http.StatusOK {
+		err = json.Unmarshal(body, v)
 	}
 	return
 }
