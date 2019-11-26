@@ -7,6 +7,7 @@ import (
 
 var (
 	defaultCluster                    = "default"
+	defaultMetaURL                    = "http://apollo.meta"
 	defaultNamespace                  = "application"
 	defaultBackupFile                 = ".agollo"
 	defaultAutoFetchOnCacheMiss       = false
@@ -39,10 +40,16 @@ func newOptions(configServerURL, appID string, opts ...Option) Options {
 		opt(&options)
 	}
 
-	if options.ConfigServerURL == "" {
-		options.ConfigServerURL = normalizeURL(os.Getenv("APOLLO_META"))
-	} else {
-		options.ConfigServerURL = normalizeURL(options.ConfigServerURL)
+	// Meta Server只是一个逻辑角色，在部署时和Config Service是在一个JVM进程中的，所以IP、端口和Config Service一致
+	for _, metaServerURL := range []string{
+		configServerURL,
+		os.Getenv("APOLLO_META"),
+		defaultMetaURL,
+	} {
+		if metaServerURL != "" {
+			options.ConfigServerURL = normalizeURL(metaServerURL)
+			break
+		}
 	}
 
 	if options.Cluster == "" {
