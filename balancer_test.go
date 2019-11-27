@@ -1,6 +1,7 @@
 package agollo
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ func TestAutoFetchBalancer(t *testing.T) {
 		},
 	}
 
-	var change bool
+	var wg sync.WaitGroup
 	go func() {
 		<-time.After(refreshIntervalInSecond)
 
@@ -28,7 +29,7 @@ func TestAutoFetchBalancer(t *testing.T) {
 			HomePageURL: "http://127.0.0.1:8081",
 		})
 
-		change = true
+		wg.Done()
 	}()
 
 	getConfigServers := func(metaServerURL, appID string) (int, []ConfigServer, error) {
@@ -40,20 +41,21 @@ func TestAutoFetchBalancer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := 0
-	for i := 0; i < 5; i++ {
+	actual, err := b.Select()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, expected[0].HomePageURL, actual)
+
+	wg.Wait()
+
+	for i := 0; i < 10; i++ {
 		actual, err := b.Select()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if change {
-			assert.Equal(t, expected[c%len(expected)].HomePageURL, actual)
-			c++
-		} else {
-			assert.Equal(t, expected[0].HomePageURL, actual)
-		}
-		time.Sleep(time.Second)
+		assert.Equal(t, expected[i%len(expected)].HomePageURL, actual)
 	}
 }
 
