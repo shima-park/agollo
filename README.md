@@ -8,7 +8,7 @@
 [![GoDoc](http://godoc.org/github.com/shima-park/agollo?status.svg)](http://godoc.org/github.com/shima-park/agollo)
 [![GitHub release](https://img.shields.io/github/release/shima-park/agollo.svg)](https://github.com/shima-park/agollo/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-  
+
 携程Apollo Golang版客户端
 
 针对[apollo openapi](https://github.com/shima-park/apollo-openapi)的golang 客户端封装
@@ -21,6 +21,7 @@ go get -u github.com/shima-park/agollo
 
 ## Features
 * 实时同步配置
+* 客户端SLB
 * 配置文件容灾
 * 零依赖
 * 支持多namespace, cluster
@@ -59,6 +60,23 @@ func main() {
 		a.Get("foo", agollo.WithNamespace("other_namespace")),
 	)
 }
+```
+
+### 客户端SLB
+客户端SLB的启用逻辑：
+1. 使用者主动增加配置项agollo.EnableSLB(true)
+或者
+2. (客户端显示传递的configServerURL) 和 (环境变量中的APOLLO_CONFIGSERVICE) 都为空值
+
+SLB更新间隔默认是60s和官方java sdk保持一致，可以通过agollo.ConfigServerRefreshIntervalInSecond(time.Second * 90)来修改
+
+SLB的MetaServer地址来源(用来调用接口获取configServer列表)，取下列表中非空的一项:
+1. 用户显示传递的configServerURL
+2. 环境变量中的APOLLO_META
+
+
+```
+a, err := agollo.New("localhost:8080", "your_appid", agollo.EnableSLB(true))
 ```
 
 ### 实时同步配置
