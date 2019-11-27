@@ -21,10 +21,10 @@ go get -u github.com/shima-park/agollo
 
 ## Features
 * 实时同步配置
-* 客户端SLB
 * 配置文件容灾
 * 零依赖
 * 支持多namespace, cluster
+* 客户端SLB
 * 提供Viper配置库的apollo插件
 
 ## 示例
@@ -60,23 +60,6 @@ func main() {
 		a.Get("foo", agollo.WithNamespace("other_namespace")),
 	)
 }
-```
-
-### 客户端SLB
-客户端SLB的启用逻辑：
-1. 使用者主动增加配置项agollo.EnableSLB(true)
-或者
-2. (客户端显示传递的configServerURL) 和 (环境变量中的APOLLO_CONFIGSERVICE) 都为空值
-
-SLB更新间隔默认是60s和官方java sdk保持一致，可以通过agollo.ConfigServerRefreshIntervalInSecond(time.Second * 90)来修改
-
-SLB的MetaServer地址来源(用来调用接口获取configServer列表)，取下列表中非空的一项:
-1. 用户显示传递的configServerURL
-2. 环境变量中的APOLLO_META
-
-
-```
-a, err := agollo.New("localhost:8080", "your_appid", agollo.EnableSLB(true))
 ```
 
 ### 实时同步配置
@@ -136,8 +119,8 @@ a, err := agollo.New("localhost:8080", "your_appid",
 appNS, aNS, bNS := a.GetNameSpace("application"), a.GetNameSpace("Namespace_A"), a.GetNameSpace("Namespace_B")
 
 a.Get("foo") // 默认从application这个namespace中查找配置项
-a.Get("foo", agollo.WithNamespace("Namespace_A"))
-a.Get("foo", agollo.WithNamespace("Namespace_B"))
+a.Get("foo", agollo.WithNamespace("Namespace_A")) // 从Namespace_A中获取配置项foo
+a.Get("foo", agollo.WithNamespace("Namespace_B")) // 从Namespace_B中获取配置项foo
 // ...
 ```
 
@@ -179,6 +162,48 @@ cluster_a.Get("foo")
 cluster_b.Get("foo")
 // ...
 ```
+
+### 客户端SLB
+客户端通过MetaServer进行动态SLB的启用逻辑：
+方式1:
+```
+// 使用者主动增加配置项agollo.EnableSLB(true)
+a, err := agollo.New("localhost:8080", "your_appid", agollo.EnableSLB(true))
+```
+
+方式2:
+```
+// (客户端显示传递的configServerURL) 和 (环境变量中的APOLLO_CONFIGSERVICE) 都为空值
+// export APOLLO_CONFIGSERVICE=""
+a, err := agollo.New("", "your_appid")
+```
+
+客户端静态SLB:
+方式1:
+```
+a, err := agollo.New("localhost:8080,localhost:8081,localhost:8082", "your_appid")
+```
+
+方式2:
+```
+    export APOLLO_CONFIGSERVICE="localhost:8080,localhost:8081,localhost:8082"
+
+    a, err := agollo.New("", "your_appid")
+```
+
+SLB更新间隔默认是60s和官方java sdk保持一致，可以通过agollo.ConfigServerRefreshIntervalInSecond(time.Second * 90)来修改
+```
+a, err := agollo.New("localhost:8080", "your_appid",
+        agollo.EnableSLB(true),
+        agollo.ConfigServerRefreshIntervalInSecond(time.Second * 90),
+    )
+```
+
+! SLB的MetaServer地址来源(用来调用接口获取configServer列表)，取下列表中非空的一项:
+1. 用户显示传递的configServerURL
+2. 环境变量中的APOLLO_META
+
+! SLB的默认采用的算法是RoundRobin
 
 ### 初始化方式
 
