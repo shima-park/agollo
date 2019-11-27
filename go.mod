@@ -8,7 +8,6 @@ require (
 	github.com/pelletier/go-toml v1.4.0
 	github.com/spf13/viper v1.4.0
 	github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	gopkg.in/go-playground/assert.v1 v1.2.1
 	gopkg.in/yaml.v2 v2.2.2
 )
