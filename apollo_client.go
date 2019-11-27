@@ -23,6 +23,9 @@ type ApolloClient interface {
 
 	// 该接口会从缓存中获取配置，适合频率较高的配置拉取请求，如简单的每30秒轮询一次配置。
 	GetConfigsFromCache(configServerURL, appID, cluster, namespace string) (Configurations, error)
+
+	// 该接口从MetaServer获取ConfigServer列表
+	GetConfigServers(metaServerURL, appID string) (int, []ConfigServer, error)
 }
 
 type Notifications []Notification
@@ -55,6 +58,12 @@ type Config struct {
 	NamespaceName  string         `json:"namespaceName"`  // namespaceName: "TEST.Namespace1",
 	Configurations Configurations `json:"configurations"` // configurations: {Name: "Foo"},
 	ReleaseKey     string         `json:"releaseKey"`     // releaseKey: "20181017110222-5ce3b2da895720e8"
+}
+
+type ConfigServer struct {
+	AppName     string `json:"appName"`
+	InstanceID  string `json:"instanceId"`
+	HomePageURL string `json:"homepageUrl"`
 }
 
 type Doer interface {
@@ -158,6 +167,14 @@ func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, name
 	config = make(Configurations)
 	_, err = c.do("GET", url, config)
 	return
+}
+
+func (c *apolloClient) GetConfigServers(metaServerURL, appID string) (int, []ConfigServer, error) {
+	metaServerURL = normalizeURL(metaServerURL)
+	url := fmt.Sprintf("%s/services/config?id=%s&appId=%s", metaServerURL, c.IP, appID)
+	var cfs []ConfigServer
+	status, err := c.do("GET", url, &cfs)
+	return status, cfs, err
 }
 
 func (c *apolloClient) do(method, url string, v interface{}) (status int, err error) {

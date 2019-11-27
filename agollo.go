@@ -99,8 +99,13 @@ func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
 	a := &agollo{
 		stopCh:   make(chan struct{}),
 		errorsCh: make(chan *LongPollerError),
-		opts:     newOptions(configServerURL, appID, opts...),
 	}
+
+	options, err := newOptions(configServerURL, appID, opts...)
+	if err != nil {
+		return nil, err
+	}
+	a.opts = options
 
 	return a.preload()
 }
@@ -127,13 +132,19 @@ func (a *agollo) initNamespace(namespace string) error {
 func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Configurations, err error) {
 	a.notificationMap.Store(namespace, notificationID)
 
+	var configServerURL string
+	configServerURL, err = a.opts.Balancer.Select()
+	if err != nil {
+		return nil, err
+	}
+
 	var (
 		status              int
 		config              *Config
 		cachedReleaseKey, _ = a.releaseKeyMap.LoadOrStore(namespace, "")
 	)
 	status, config, err = a.opts.ApolloClient.GetConfigsFromNonCache(
-		a.opts.ConfigServerURL,
+		configServerURL,
 		a.opts.AppID,
 		a.opts.Cluster,
 		namespace,
@@ -151,6 +162,11 @@ func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Con
 	}
 
 	if err != nil || status != http.StatusOK {
+		a.log("ConfigServerUrl", configServerURL,
+			"Namespace", namespace,
+			"Action", "ReloadNameSpace",
+			"Error", err)
+
 		conf = Configurations{}
 		// 异常状况下，如果开启容灾，则读取备份
 		if a.opts.FailTolerantOnBackupExists {
@@ -201,15 +217,19 @@ func (a *agollo) Get(key string, opts ...GetOption) string {
 func (a *agollo) GetNameSpace(namespace string) Configurations {
 	config, found := a.cache.LoadOrStore(namespace, Configurations{})
 	if !found && a.opts.AutoFetchOnCacheMiss {
-		err := a.initNamespace(namespace)
-		if err != nil {
-			a.log("Namespace", namespace, "Action", "GetNameSpace", "Error", err.Error())
-		} else {
-			config, _ = a.cache.Load(namespace)
-		}
+		_ = a.initNamespace(namespace)
+		return a.getNameSpace(namespace)
 	}
 
 	return config.(Configurations)
+}
+
+func (a *agollo) getNameSpace(namespace string) Configurations {
+	v, ok := a.cache.Load(namespace)
+	if !ok {
+		return Configurations{}
+	}
+	return v.(Configurations)
 }
 
 func (a *agollo) Options() Options {
@@ -244,6 +264,11 @@ func (a *agollo) Stop() {
 	if a.stop {
 		return
 	}
+
+	if a.opts.Balancer != nil {
+		a.opts.Balancer.Stop()
+	}
+
 	a.stop = true
 	close(a.stopCh)
 }
@@ -332,9 +357,9 @@ func (a *agollo) getWatchChs(namespace string) []chan *ApolloResponse {
 	return chs
 }
 
-func (a *agollo) sendErrorsCh(notifications []Notification, namespace string, err error) {
+func (a *agollo) sendErrorsCh(configServerURL string, notifications []Notification, namespace string, err error) {
 	longPollerError := &LongPollerError{
-		ConfigServerURL: a.opts.ConfigServerURL,
+		ConfigServerURL: configServerURL,
 		AppID:           a.opts.AppID,
 		Cluster:         a.opts.Cluster,
 		Notifications:   notifications,
@@ -353,7 +378,6 @@ func (a *agollo) log(kvs ...interface{}) {
 	a.opts.Logger.Log(
 		append([]interface{}{
 			"[Agollo]", "",
-			"ConfigServerUrl", a.opts.ConfigServerURL,
 			"AppID", a.opts.AppID,
 			"Cluster", a.opts.Cluster,
 		},
@@ -410,31 +434,35 @@ func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
 }
 
 func (a *agollo) longPoll() {
-	notifications := a.notifications()
+	localNotifications := a.notifications()
+	configServerURL, err := a.opts.Balancer.Select()
+	if err != nil {
+		a.log("ConfigServerUrl", configServerURL,
+			"Notifications", Notifications(localNotifications).String(),
+			"Error", err, "Action", "Balancer.Select")
+		a.sendErrorsCh("", nil, "", err)
+		return
+	}
 
 	status, notifications, err := a.opts.ApolloClient.Notifications(
-		a.opts.ConfigServerURL,
+		configServerURL,
 		a.opts.AppID,
 		a.opts.Cluster,
-		notifications,
+		localNotifications,
 	)
 	if err != nil {
-		a.log("Notifications", Notifications(a.notifications()).String(),
-			"Error", err.Error(), "Action", "LongPoll")
-		a.sendErrorsCh(notifications, "", err)
+		a.log("ConfigServerUrl", configServerURL,
+			"Notifications", Notifications(localNotifications).String(),
+			"Error", err, "Action", "LongPoll")
+		a.sendErrorsCh(configServerURL, notifications, "", err)
+		return
 	}
 
 	if status == http.StatusOK {
 		// 服务端判断没有改变，不会返回结果,这个时候不需要修改，遍历空数组跳过
 		for _, notification := range notifications {
 			// 读取旧缓存用来给监听队列
-			oldValue := func() Configurations {
-				v, ok := a.cache.Load(notification.NamespaceName)
-				if !ok {
-					return Configurations{}
-				}
-				return v.(Configurations)
-			}()
+			oldValue := a.getNameSpace(notification.NamespaceName)
 
 			isSendChange := a.isSendChange(notification.NamespaceName)
 
@@ -449,7 +477,7 @@ func (a *agollo) longPoll() {
 						newValue)
 				}
 			} else {
-				a.sendErrorsCh(notifications, notification.NamespaceName, err)
+				a.sendErrorsCh(configServerURL, notifications, notification.NamespaceName, err)
 			}
 		}
 	}

@@ -18,3 +18,12 @@ func normalizeURL(url string) string {
 
 	return strings.TrimSuffix(url, "/")
 }
+
+func splitCommaSeparatedURL(s string) []string {
+	var urls []string
+	for _, url := range strings.Split(s, ",") {
+		urls = append(urls, normalizeURL(strings.TrimSpace(url)))
+	}
+
+	return urls
+}

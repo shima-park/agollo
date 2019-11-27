@@ -7,16 +7,15 @@ import (
 
 var (
 	defaultCluster                    = "default"
-	defaultMetaURL                    = "http://apollo.meta"
 	defaultNamespace                  = "application"
 	defaultBackupFile                 = ".agollo"
 	defaultAutoFetchOnCacheMiss       = false
 	defaultFailTolerantOnBackupExists = false
+	defaultEnableSLB                  = false
 	defaultLongPollInterval           = 1 * time.Second
 )
 
 type Options struct {
-	ConfigServerURL            string        // apollo 服务地址
 	AppID                      string        // appid
 	Cluster                    string        // 默认的集群名称，默认：default
 	DefaultNamespace           string        // 默认的命名空间，默认：application
@@ -27,37 +26,43 @@ type Options struct {
 	LongPollerInterval         time.Duration // 轮训间隔时间，默认：1s
 	BackupFile                 string        // 备份文件存放地址，默认：.agollo
 	FailTolerantOnBackupExists bool          // 服务器连接失败时允许读取备份，默认：false
+	Balancer                   Balancer      // ConfigServer负载均衡
+	EnableSLB                  bool          // 启用ConfigServer负载均衡
+	RefreshIntervalInSecond    time.Duration // ConfigServer刷新间隔
 }
 
-func newOptions(configServerURL, appID string, opts ...Option) Options {
+func newOptions(configServerURL, appID string, opts ...Option) (Options, error) {
 	var options = Options{
-		ConfigServerURL:            configServerURL,
 		AppID:                      appID,
+		Cluster:                    defaultCluster,
+		DefaultNamespace:           defaultNamespace,
+		ApolloClient:               NewApolloClient(),
+		Logger:                     NewLogger(),
 		AutoFetchOnCacheMiss:       defaultAutoFetchOnCacheMiss,
+		LongPollerInterval:         defaultLongPollInterval,
+		BackupFile:                 defaultBackupFile,
 		FailTolerantOnBackupExists: defaultFailTolerantOnBackupExists,
+		EnableSLB:                  defaultEnableSLB,
 	}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	// Meta Server只是一个逻辑角色，在部署时和Config Service是在一个JVM进程中的，所以IP、端口和Config Service一致
-	for _, metaServerURL := range []string{
-		configServerURL,
-		os.Getenv("APOLLO_META"),
-		defaultMetaURL,
-	} {
-		if metaServerURL != "" {
-			options.ConfigServerURL = normalizeURL(metaServerURL)
-			break
+	if options.Balancer == nil {
+		var b Balancer
+		configServerURLs := getConfigServers(configServerURL)
+		if options.EnableSLB || len(configServerURLs) == 0 {
+			var err error
+			b, err = NewAutoFetchBalancer(configServerURL, appID,
+				options.ApolloClient.GetConfigServers,
+				options.RefreshIntervalInSecond, options.Logger)
+			if err != nil {
+				return options, err
+			}
+		} else {
+			b = NewRoundRobin(configServerURLs)
 		}
-	}
-
-	if options.Cluster == "" {
-		options.Cluster = defaultCluster
-	}
-
-	if options.DefaultNamespace == "" {
-		options.DefaultNamespace = defaultNamespace
+		options.Balancer = b
 	}
 
 	if len(options.PreloadNamespaces) == 0 {
@@ -68,23 +73,33 @@ func newOptions(configServerURL, appID string, opts ...Option) Options {
 		}
 	}
 
-	if options.ApolloClient == nil {
-		options.ApolloClient = NewApolloClient()
+	return options, nil
+}
+
+/*
+参考了java客户端实现
+目前实现方式:
+ 0. 客户端显式传入ConfigServerURL
+ 2. Get from OS environment variable
+
+未实现:
+ 1. Get from System Property
+ 3. Get from server.properties
+https://github.com/ctripcorp/apollo/blob/master/apollo-client/src/main/java/com/ctrip/framework/apollo/internals/ConfigServiceLocator.java#L74
+*/
+func getConfigServers(configServerURL string) []string {
+	var urls []string
+	for _, url := range []string{
+		configServerURL,
+		os.Getenv("APOLLO_CONFIGSERVICE"),
+	} {
+		if url != "" {
+			urls = splitCommaSeparatedURL(url)
+			break
+		}
 	}
 
-	if options.Logger == nil {
-		options.Logger = NewLogger()
-	}
-
-	if options.LongPollerInterval <= time.Duration(0) {
-		options.LongPollerInterval = defaultLongPollInterval
-	}
-
-	if options.BackupFile == "" {
-		options.BackupFile = defaultBackupFile
-	}
-
-	return options
+	return urls
 }
 
 type Option func(*Options)
@@ -140,6 +155,24 @@ func BackupFile(backupFile string) Option {
 func FailTolerantOnBackupExists() Option {
 	return func(o *Options) {
 		o.FailTolerantOnBackupExists = true
+	}
+}
+
+func EnableSLB(b bool) Option {
+	return func(o *Options) {
+		o.EnableSLB = b
+	}
+}
+
+func WithBalancer(b Balancer) Option {
+	return func(o *Options) {
+		o.Balancer = b
+	}
+}
+
+func ConfigServerRefreshIntervalInSecond(refreshIntervalInSecond time.Duration) Option {
+	return func(o *Options) {
+		o.RefreshIntervalInSecond = refreshIntervalInSecond
 	}
 }
 
