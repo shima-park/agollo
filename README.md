@@ -165,35 +165,35 @@ cluster_b.Get("foo")
 
 ### 客户端SLB
 客户端通过MetaServer进行动态SLB的启用逻辑：
-方式1:
+
 ```
-// 使用者主动增加配置项agollo.EnableSLB(true)
-a, err := agollo.New("localhost:8080", "your_appid", agollo.EnableSLB(true))
+//方式1:
+    // 使用者主动增加配置项agollo.EnableSLB(true)
+    a, err := agollo.New("localhost:8080", "your_appid", agollo.EnableSLB(true))
+
+
+//方式2:
+    // (客户端显示传递的configServerURL) 和 (环境变量中的APOLLO_CONFIGSERVICE) 都为空值
+    // export APOLLO_CONFIGSERVICE=""
+    a, err := agollo.New("", "your_appid")
 ```
 
-方式2:
-```
-// (客户端显示传递的configServerURL) 和 (环境变量中的APOLLO_CONFIGSERVICE) 都为空值
-// export APOLLO_CONFIGSERVICE=""
-a, err := agollo.New("", "your_appid")
-```
+客户端静态SLB(现在支持","分割的多个configServer地址列表):
 
-客户端静态SLB:
-方式1:
 ```
-a, err := agollo.New("localhost:8080,localhost:8081,localhost:8082", "your_appid")
-```
+//方式1:
+    // 直接传入","分割的多个configServer地址列表
+    a, err := agollo.New("localhost:8080,localhost:8081,localhost:8082", "your_appid")
 
-方式2:
-```
-    export APOLLO_CONFIGSERVICE="localhost:8080,localhost:8081,localhost:8082"
-
+//方式2:
+    // 在环境变量中APOLLO_CONFIGSERVICE设置","分割的多个configServer地址列表
+    // export APOLLO_CONFIGSERVICE="localhost:8080,localhost:8081,localhost:8082"
     a, err := agollo.New("", "your_appid")
 ```
 
 SLB更新间隔默认是60s和官方java sdk保持一致，可以通过agollo.ConfigServerRefreshIntervalInSecond(time.Second * 90)来修改
 ```
-a, err := agollo.New("localhost:8080", "your_appid",
+    a, err := agollo.New("localhost:8080", "your_appid",
         agollo.EnableSLB(true),
         agollo.ConfigServerRefreshIntervalInSecond(time.Second * 90),
     )
