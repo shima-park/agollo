@@ -175,6 +175,7 @@ cluster_b.Get("foo")
 //方式2:
     // (客户端显示传递的configServerURL) 和 (环境变量中的APOLLO_CONFIGSERVICE) 都为空值
     // export APOLLO_CONFIGSERVICE=""
+    // 此方式必须设置 export APOLLO_META="your meta_server address"
     a, err := agollo.New("", "your_appid")
 ```
 
