@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/shima-park/agollo"
@@ -97,24 +96,22 @@ func newAgollo(appid, endpoint string, opts []agollo.Option) (agollo.Agollo, err
 
 func (cm apolloConfigManager) Get(namespace string) ([]byte, error) {
 	configs := cm.agollo.GetNameSpace(namespace)
-	return marshalSettings(getConfigType(namespace), configs)
+	return marshalConfigs(getConfigType(namespace), configs)
 }
 
-func marshalSettings(configType string, configs map[string]interface{}) ([]byte, error) {
-	buff := bytes.NewBuffer(nil)
-	settings := map[string]interface{}{}
+func marshalConfigs(configType string, configs map[string]interface{}) ([]byte, error) {
+	var bts []byte
+	var err error
 	switch configType {
 	case "json", "yml", "yaml", "xml":
-		content := configs["content"].(string)
-		err := UnmarshalReader(strings.NewReader(content), settings, configType)
-		if err != nil {
-			return nil, err
+		content := configs["content"]
+		if content != nil {
+			bts = []byte(content.(string))
 		}
 	case "properties":
-		settings = configs
+		bts, err = marshalProperties(configs)
 	}
-	err := MarshalWriter(buff, settings, configType)
-	return buff.Bytes(), err
+	return bts, err
 }
 
 func (cm apolloConfigManager) Watch(namespace string, stop chan bool) <-chan *viper.RemoteResponse {
@@ -135,7 +132,7 @@ func (cm apolloConfigManager) Watch(namespace string, stop chan bool) <-chan *vi
 				}
 
 				configType := getConfigType(namespace)
-				value, err := marshalSettings(configType, r.NewValue)
+				value, err := marshalConfigs(configType, r.NewValue)
 
 				resp <- &viper.RemoteResponse{Value: value, Error: err}
 			}
