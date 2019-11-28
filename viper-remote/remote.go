@@ -105,10 +105,12 @@ func marshalSettings(configType string, configs map[string]interface{}) ([]byte,
 	settings := map[string]interface{}{}
 	switch configType {
 	case "json", "yml", "yaml", "xml":
-		content := configs["content"].(string)
-		err := UnmarshalReader(strings.NewReader(content), settings, configType)
-		if err != nil {
-			return nil, err
+		content := configs["content"]
+		if content != nil {
+			err := UnmarshalReader(strings.NewReader(content.(string)), settings, configType)
+			if err != nil {
+				return nil, err
+			}
 		}
 	case "properties":
 		settings = configs
