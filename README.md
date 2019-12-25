@@ -68,7 +68,7 @@ func main() {
 a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
 // error handle...
 
-errorCh := a.Start()
+errorCh := a.Start()  // Start后会启动goroutine监听变化，并更新agollo对象内的配置cache
 // 或者忽略错误处理直接 a.Start()
 ```
 
@@ -78,7 +78,8 @@ errorCh := a.Start()
 a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
 // error handle...
 
-a.Start()
+errorCh := a.Start()  // Start后会启动goroutine监听变化，并更新agollo对象内的配置cache
+// 或者忽略错误处理直接 a.Start()
 
 watchCh := a.Watch()
 
