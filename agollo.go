@@ -290,8 +290,21 @@ func (a *agollo) Watch() <-chan *ApolloResponse {
 	return a.watchCh
 }
 
+func fixWatchNamespace(namespace string) string {
+	// fix: 传给apollo类似test.properties这种namespace
+	// 通知回来的NamespaceName却没有.properties后缀，追加.properties后缀来修正此问题
+	// fix: 默认的application在apollo又是个特例，使用者在使用的时候不会传.properties后缀
+	// 而通知接口返回的namespace名字也不会带后缀,将默认application排除来修正此问题
+	ext := path.Ext(namespace)
+	if ext == "" {
+		namespace = namespace + "." + defaultConfigType
+	}
+	return namespace
+}
+
 func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *ApolloResponse {
-	watchCh, exists := a.watchNamespaceChMap.LoadOrStore(namespace, make(chan *ApolloResponse))
+	watchNamespace := fixWatchNamespace(namespace)
+	watchCh, exists := a.watchNamespaceChMap.LoadOrStore(watchNamespace, make(chan *ApolloResponse))
 	if !exists {
 		go func() {
 			// 非预加载以外的namespace,初始化基础meta信息,否则没有longpoll
@@ -305,7 +318,7 @@ func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *Apollo
 
 			if stop != nil {
 				<-stop
-				a.watchNamespaceChMap.Delete(namespace)
+				a.watchNamespaceChMap.Delete(watchNamespace)
 			}
 		}()
 	}
@@ -343,16 +356,8 @@ func (a *agollo) getWatchChs(namespace string) []chan *ApolloResponse {
 		chs = append(chs, a.watchCh)
 	}
 
-	// fix: 传给apollo类似test.properties这种namespace
-	// 通知回来的NamespaceName却没有.properties后缀，追加.properties后缀来修正此问题
-	// fix: 默认的application在apollo又是个特例，使用者在使用的时候不会传.properties后缀
-	// 而通知接口返回的namespace名字也不会带后缀,将默认application排除来修正此问题
-	ext := path.Ext(namespace)
-	if defaultNamespace != namespace && ext == "" {
-		namespace = namespace + "." + defaultConfigType
-	}
-
-	if watchNamespaceCh, found := a.watchNamespaceChMap.Load(namespace); found {
+	watchNamespace := fixWatchNamespace(namespace)
+	if watchNamespaceCh, found := a.watchNamespaceChMap.Load(watchNamespace); found {
 		chs = append(chs, watchNamespaceCh.(chan *ApolloResponse))
 	}
 
