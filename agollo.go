@@ -344,9 +344,11 @@ func (a *agollo) getWatchChs(namespace string) []chan *ApolloResponse {
 	}
 
 	// fix: 传给apollo类似test.properties这种namespace
-	// 通知回来的NamespaceName却没有.properties后缀，修正此问题
+	// 通知回来的NamespaceName却没有.properties后缀，追加.properties后缀来修正此问题
+	// fix: 默认的application在apollo又是个特例，使用者在使用的时候不会传.properties后缀
+	// 而通知接口返回的namespace名字也不会带后缀,将默认application排除来修正此问题
 	ext := path.Ext(namespace)
-	if ext == "" {
+	if defaultNamespace != namespace && ext == "" {
 		namespace = namespace + "." + defaultConfigType
 	}
 
