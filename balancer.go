@@ -48,6 +48,7 @@ func NewAutoFetchBalancer(configServerURL, appID string, getConfigServers GetCon
 		metaServerAddress: getMetaServerAddress(configServerURL), // Meta Server只是一个逻辑角色，在部署时和Config Service是在一个JVM进程中的，所以IP、端口和Config Service一致
 		logger:            logger,
 		stopCh:            make(chan struct{}),
+		b:                 NewRoundRobin([]string{configServerURL}),
 	}
 
 	err := b.updateConfigServices()

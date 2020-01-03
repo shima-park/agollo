@@ -10,7 +10,6 @@ import (
 func main() {
 	// 通过默认根目录下的app.properties初始化agollo
 	err := agollo.InitWithDefaultConfigFile(
-		agollo.EnableSLB(true), // 启用SLB客户端负载均衡
 		agollo.WithLogger(agollo.NewLogger(agollo.LoggerWriter(os.Stdout))), // 打印日志信息
 		agollo.PreloadNamespaces("TEST.Namespace"),                          // 预先加载的namespace列表，如果是通过配置启动，会在app.properties配置的基础上追加
 		agollo.AutoFetchOnCacheMiss(),                                       // 在配置未找到时，去apollo的带缓存的获取配置接口，获取配置
