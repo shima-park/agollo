@@ -65,14 +65,6 @@ func newOptions(configServerURL, appID string, opts ...Option) (Options, error) 
 		options.Balancer = b
 	}
 
-	if len(options.PreloadNamespaces) == 0 {
-		options.PreloadNamespaces = []string{defaultNamespace}
-	} else {
-		if !stringInSlice(defaultNamespace, options.PreloadNamespaces) {
-			PreloadNamespaces(defaultNamespace)(&options)
-		}
-	}
-
 	return options, nil
 }
 
