@@ -1,6 +1,9 @@
 package agollo
 
 import (
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -74,6 +77,7 @@ type apolloClient struct {
 	Doer       Doer
 	IP         string
 	ConfigType string // 默认properties不需要在namespace后加后缀名，其他情况例如application.json {xml,yml,yaml,json,...}
+	AccessKey  string
 }
 
 type ApolloClientOption func(*apolloClient)
@@ -93,6 +97,12 @@ func WithIP(ip string) ApolloClientOption {
 func WithConfigType(configType string) ApolloClientOption {
 	return func(a *apolloClient) {
 		a.ConfigType = configType
+	}
+}
+
+func WithAccessKey(accessKey string) ApolloClientOption {
+	return func(a *apolloClient) {
+		a.AccessKey = accessKey
 	}
 }
 
@@ -119,16 +129,50 @@ func NewApolloClient(opts ...ApolloClientOption) ApolloClient {
 	return c
 }
 
+const (
+	AUTHORIZATION_FORMAT      = "Apollo %s:%s"
+	DELIMITER                 = "\n"
+	HTTP_HEADER_AUTHORIZATION = "Authorization"
+	HTTP_HEADER_TIMESTAMP     = "Timestamp"
+)
+
+func signature(timestamp, url, accessKey string) string {
+
+	stringToSign := timestamp + DELIMITER + url
+
+	key := []byte(accessKey)
+	mac := hmac.New(sha1.New, key)
+	mac.Write([]byte(stringToSign))
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (c *apolloClient) httpHeader(appID, uri string) map[string]string {
+
+	headers := map[string]string{}
+	if "" == c.AccessKey {
+		return headers
+	}
+
+	timestamp := fmt.Sprintf("%v", time.Now().UnixNano()/int64(time.Millisecond))
+	signature := signature(timestamp, uri, c.AccessKey)
+
+	headers[HTTP_HEADER_AUTHORIZATION] = fmt.Sprintf(AUTHORIZATION_FORMAT, appID, signature)
+	headers[HTTP_HEADER_TIMESTAMP] = timestamp
+
+	return headers
+}
+
 func (c *apolloClient) Notifications(configServerURL, appID, cluster string, notifications []Notification) (status int, result []Notification, err error) {
 	configServerURL = normalizeURL(configServerURL)
-	url := fmt.Sprintf("%s/notifications/v2?appId=%s&cluster=%s&notifications=%s",
-		configServerURL,
+	requestURI := fmt.Sprintf("/notifications/v2?appId=%s&cluster=%s&notifications=%s",
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
 		url.QueryEscape(Notifications(notifications).String()),
 	)
+	apiURL := fmt.Sprintf("%s%s", configServerURL, requestURI)
 
-	status, err = c.do("GET", url, &result)
+	headers := c.httpHeader(appID, requestURI)
+	status, err = c.do("GET", apiURL, headers, &result)
 	return
 }
 
@@ -139,49 +183,58 @@ func (c *apolloClient) GetConfigsFromNonCache(configServerURL, appID, cluster, n
 	}
 
 	configServerURL = normalizeURL(configServerURL)
-	url := fmt.Sprintf("%s/configs/%s/%s/%s?releaseKey=%s&ip=%s",
-		configServerURL,
+	requestURI := fmt.Sprintf("/configs/%s/%s/%s?releaseKey=%s&ip=%s",
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
 		url.QueryEscape(c.getNamespace(namespace)),
 		options.ReleaseKey,
 		c.IP,
 	)
+	apiURL := fmt.Sprintf("%s%s", configServerURL, requestURI)
 
+	headers := c.httpHeader(appID, requestURI)
 	config = new(Config)
-	status, err = c.do("GET", url, config)
+	status, err = c.do("GET", apiURL, headers, config)
 	return
 
 }
 
 func (c *apolloClient) GetConfigsFromCache(configServerURL, appID, cluster, namespace string) (config Configurations, err error) {
 	configServerURL = normalizeURL(configServerURL)
-	url := fmt.Sprintf("%s/configfiles/json/%s/%s/%s?ip=%s",
-		configServerURL,
+	requestURI := fmt.Sprintf("/configfiles/json/%s/%s/%s?ip=%s",
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
 		url.QueryEscape(c.getNamespace(namespace)),
 		c.IP,
 	)
+	apiURL := fmt.Sprintf("%s%s", configServerURL, requestURI)
 
+	headers := c.httpHeader(appID, requestURI)
 	config = make(Configurations)
-	_, err = c.do("GET", url, config)
+	_, err = c.do("GET", apiURL, headers, config)
 	return
 }
 
 func (c *apolloClient) GetConfigServers(metaServerURL, appID string) (int, []ConfigServer, error) {
 	metaServerURL = normalizeURL(metaServerURL)
-	url := fmt.Sprintf("%s/services/config?id=%s&appId=%s", metaServerURL, c.IP, appID)
+	requestURI := fmt.Sprintf("/services/config?id=%s&appId=%s", c.IP, appID)
+	apiURL := fmt.Sprintf("%s%s", metaServerURL, requestURI)
+
+	headers := c.httpHeader(appID, requestURI)
 	var cfs []ConfigServer
-	status, err := c.do("GET", url, &cfs)
+	status, err := c.do("GET", apiURL, headers, &cfs)
 	return status, cfs, err
 }
 
-func (c *apolloClient) do(method, url string, v interface{}) (status int, err error) {
+func (c *apolloClient) do(method, url string, headers map[string]string, v interface{}) (status int, err error) {
 	var req *http.Request
 	req, err = http.NewRequest(method, url, nil)
 	if err != nil {
 		return
+	}
+
+	for key, val := range headers {
+		req.Header.Set(key, val)
 	}
 
 	var body []byte
