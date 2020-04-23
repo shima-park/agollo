@@ -1,4 +1,4 @@
-module github.com/arashicage/agollo
+module github.com/shima-park/agollo
 
 go 1.12
 
