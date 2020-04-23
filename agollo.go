@@ -77,6 +77,7 @@ func NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error) {
 		Cluster        string   `json:"cluster,omitempty"`
 		NamespaceNames []string `json:"namespaceNames,omitempty"`
 		IP             string   `json:"ip,omitempty"`
+		AccessKey      string   `json:"accessKey,omitempty"`
 	}
 	if err := json.NewDecoder(f).Decode(&conf); err != nil {
 		return nil, err
@@ -89,6 +90,7 @@ func NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error) {
 			[]Option{
 				Cluster(conf.Cluster),
 				PreloadNamespaces(conf.NamespaceNames...),
+				AccessKey(conf.AccessKey),
 			},
 			opts...,
 		)...,
