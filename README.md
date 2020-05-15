@@ -26,6 +26,7 @@ go get -u github.com/shima-park/agollo
 * 支持多namespace, cluster
 * 客户端SLB
 * 提供Viper配置库的apollo插件
+* 支持通过 ACCESSKEY_SECRET 来实现 client 安全访问
 
 ## 示例
 
