@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/shima-park/agollo"
 )
@@ -58,9 +59,10 @@ func main() {
 	watchCh := agollo.Watch()
 
 	stop := make(chan bool)
-	watchNamespace := "application"
+	watchNamespace := "YourNamespace"
 	watchNSCh := agollo.WatchNamespace(watchNamespace, stop)
 
+	appNSCh := agollo.WatchNamespace("application", stop)
 	go func() {
 		for {
 			select {
@@ -70,6 +72,10 @@ func main() {
 				fmt.Println("Watch Apollo:", resp)
 			case resp := <-watchNSCh:
 				fmt.Println("Watch Namespace", watchNamespace, resp)
+			case resp := <-appNSCh:
+				fmt.Println("Watch Namespace", "application", resp)
+			case <-time.After(time.Second):
+				fmt.Println("timeout:", agollo.Get("timeout"))
 			}
 		}
 	}()

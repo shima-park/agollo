@@ -171,13 +171,7 @@ func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Con
 		}
 	case http.StatusNotModified: // 服务端未修改配置情况下返回304
 		conf = a.getNameSpace(namespace)
-	case http.StatusNotFound: // 服务端未找到namespace时返回404
-		// fix #23 当需要加载的namespace还未创建时，置为以下状态
-		// 1. notificationMap添加namespace以保证在服务器端的轮训列表中
-		// 2. 且notificationID(0)  > 默认值(-1), 服务端新建完后发送改变事件
-		a.notificationMap.Store(namespace, 0)
-		a.cache.Store(namespace, Configurations{})
-	default: // error || 其他未知错误情况
+	default:
 		a.log("ConfigServerUrl", configServerURL, "Namespace", namespace,
 			"Action", "ReloadNameSpace", "ServerResponseStatus", status,
 			"Error", err)
@@ -187,11 +181,11 @@ func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Con
 		if a.opts.FailTolerantOnBackupExists {
 			backupConfig, lerr := a.loadBackup(namespace)
 			if lerr == nil {
+				a.cache.Store(namespace, backupConfig)
 				conf = backupConfig
 				err = nil
 			}
 		}
-		a.cache.Store(namespace, conf)
 	}
 
 	return
@@ -440,6 +434,15 @@ func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
 	return nil, nil
 }
 
+// longPoll 长轮训获取配置修改通知
+// 已知的apollo在配置未修改情况下返回304状态码，修改返回200状态码并带上notificationID
+// (1) 先通过/configs接口获取配置后，而接口中无法获取notificationID只能获取releaseKey
+// 通过releaseKey去重复请求接口得到304，从而知道配置已更新到最新
+// (2) 在初始化不知道namespace的notificationID情况下，通知接口返回200状态码时
+// * 无法判断是否需要更新配置(只能通过再次请求接口，在304状态下不修改，在200状态下更新，并存储notificationID)
+// * 在初始化不知道namespace的notificationID情况下，无法判断是否需要发送修改事件(只能通过比较 新/旧 配置是否有差异部分，来判断是否发送修改事件)
+// [Apollo BUG] https://github.com/ctripcorp/apollo/issues/3123
+// 在我实测下来，无法在初始化时通过调用/notifications接口获得notificationID，有些特殊情况会被hold死且无notificationID返回
 func (a *agollo) longPoll() {
 	localNotifications := a.notifications()
 	configServerURL, err := a.opts.Balancer.Select()
@@ -471,12 +474,10 @@ func (a *agollo) longPoll() {
 			// 读取旧缓存用来给监听队列
 			oldValue := a.getNameSpace(notification.NamespaceName)
 
-			isSendChange := a.isSendChange(notification.NamespaceName)
-
 			// 更新namespace
 			newValue, err := a.reloadNamespace(notification.NamespaceName, notification.NotificationID)
 
-			if err == nil && isSendChange {
+			if err == nil {
 				// 发送到监听channel
 				a.sendWatchCh(notification.NamespaceName, oldValue, newValue)
 			} else {
@@ -484,14 +485,6 @@ func (a *agollo) longPoll() {
 			}
 		}
 	}
-}
-
-// apollo有个蛋疼的地方，通过noncache接口可以获取到配置，releasekey信息
-// 但是无法获取到namespace的notificationID
-// 导致监听配置时，无法判断是否需要通知或者更新
-func (a *agollo) isSendChange(namespace string) bool {
-	v, ok := a.notificationMap.Load(namespace)
-	return ok && v.(int) > defaultNotificationID
 }
 
 func (a *agollo) notifications() []Notification {
