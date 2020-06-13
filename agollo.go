@@ -132,6 +132,12 @@ func (a *agollo) initNamespace(namespace string) error {
 }
 
 func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Configurations, err error) {
+	// 判断relaod的通知id是否大于缓存通知id，防止无谓的刷新缓存，
+	savedNotificationID, ok := a.notificationMap.Load(namespace)
+	if ok && savedNotificationID.(int) >= notificationID {
+		conf = a.getNameSpace(namespace)
+		return
+	}
 	a.notificationMap.Store(namespace, notificationID)
 
 	var configServerURL string
@@ -153,20 +159,27 @@ func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Con
 		ReleaseKey(cachedReleaseKey.(string)),
 	)
 
-	// 服务端未找到namespace时返回404
-	if status == http.StatusNotFound {
+	switch status {
+	case http.StatusOK: // 正常响应
+		a.cache.Store(namespace, config.Configurations)     // 覆盖旧缓存
+		a.releaseKeyMap.Store(namespace, config.ReleaseKey) // 存储最新的release_key
+		conf = config.Configurations
+
+		// 备份配置
+		if err = a.backup(); err != nil {
+			return
+		}
+	case http.StatusNotModified: // 服务端未修改配置情况下返回304
+		conf = a.getNameSpace(namespace)
+	case http.StatusNotFound: // 服务端未找到namespace时返回404
 		// fix #23 当需要加载的namespace还未创建时，置为以下状态
 		// 1. notificationMap添加namespace以保证在服务器端的轮训列表中
 		// 2. 且notificationID(0)  > 默认值(-1), 服务端新建完后发送改变事件
 		a.notificationMap.Store(namespace, 0)
 		a.cache.Store(namespace, Configurations{})
-		return
-	}
-
-	if err != nil || status != http.StatusOK {
-		a.log("ConfigServerUrl", configServerURL,
-			"Namespace", namespace,
-			"Action", "ReloadNameSpace",
+	default: // error || 其他未知错误情况
+		a.log("ConfigServerUrl", configServerURL, "Namespace", namespace,
+			"Action", "ReloadNameSpace", "ServerResponseStatus", status,
 			"Error", err)
 
 		conf = Configurations{}
@@ -178,20 +191,7 @@ func (a *agollo) reloadNamespace(namespace string, notificationID int) (conf Con
 				err = nil
 			}
 		}
-
 		a.cache.Store(namespace, conf)
-		a.releaseKeyMap.Store(namespace, cachedReleaseKey.(string))
-
-		return
-	}
-
-	conf = config.Configurations
-	a.cache.Store(namespace, config.Configurations)     // 覆盖旧缓存
-	a.releaseKeyMap.Store(namespace, config.ReleaseKey) // 存储最新的release_key
-
-	// 备份配置
-	if err = a.backup(); err != nil {
-		return
 	}
 
 	return
@@ -476,13 +476,9 @@ func (a *agollo) longPoll() {
 			// 更新namespace
 			newValue, err := a.reloadNamespace(notification.NamespaceName, notification.NotificationID)
 
-			if err == nil {
-				if isSendChange {
-					// 发送到监听channel
-					a.sendWatchCh(notification.NamespaceName,
-						oldValue,
-						newValue)
-				}
+			if err == nil && isSendChange {
+				// 发送到监听channel
+				a.sendWatchCh(notification.NamespaceName, oldValue, newValue)
 			} else {
 				a.sendErrorsCh(configServerURL, notifications, notification.NamespaceName, err)
 			}
@@ -490,6 +486,9 @@ func (a *agollo) longPoll() {
 	}
 }
 
+// apollo有个蛋疼的地方，通过noncache接口可以获取到配置，releasekey信息
+// 但是无法获取到namespace的notificationID
+// 导致监听配置时，无法判断是否需要通知或者更新
 func (a *agollo) isSendChange(namespace string) bool {
 	v, ok := a.notificationMap.Load(namespace)
 	return ok && v.(int) > defaultNotificationID

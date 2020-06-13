@@ -29,7 +29,7 @@ type Options struct {
 	Balancer                   Balancer      // ConfigServer负载均衡
 	EnableSLB                  bool          // 启用ConfigServer负载均衡
 	RefreshIntervalInSecond    time.Duration // ConfigServer刷新间隔
-	AccessKey                  string
+	ClientOptions              []ApolloClientOption
 }
 
 func newOptions(configServerURL, appID string, opts ...Option) (Options, error) {
@@ -37,7 +37,7 @@ func newOptions(configServerURL, appID string, opts ...Option) (Options, error) 
 		AppID:                      appID,
 		Cluster:                    defaultCluster,
 		DefaultNamespace:           defaultNamespace,
-		// ApolloClient:               NewApolloClient(),
+		ApolloClient:               NewApolloClient(),
 		Logger:                     NewLogger(),
 		AutoFetchOnCacheMiss:       defaultAutoFetchOnCacheMiss,
 		LongPollerInterval:         defaultLongPollInterval,
@@ -49,7 +49,7 @@ func newOptions(configServerURL, appID string, opts ...Option) (Options, error) 
 		opt(&options)
 	}
 
-	options.ApolloClient = NewApolloClient(WithAccessKey(options.AccessKey))
+	options.ApolloClient.Apply(options.ClientOptions...)
 
 	if options.Balancer == nil {
 		var b Balancer
@@ -173,7 +173,13 @@ func ConfigServerRefreshIntervalInSecond(refreshIntervalInSecond time.Duration) 
 
 func AccessKey(accessKey string) Option {
 	return func(o *Options) {
-		o.AccessKey = accessKey
+		o.ClientOptions = append(o.ClientOptions, WithAccessKey(accessKey))
+	}
+}
+
+func WithClientOptinons(opts ...ApolloClientOption) Option {
+	return func(o *Options) {
+		o.ClientOptions = append(o.ClientOptions, opts...)
 	}
 }
 

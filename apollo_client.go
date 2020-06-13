@@ -19,6 +19,8 @@ var (
 
 // https://github.com/ctripcorp/apollo/wiki/%E5%85%B6%E5%AE%83%E8%AF%AD%E8%A8%80%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8E%A5%E5%85%A5%E6%8C%87%E5%8D%97
 type ApolloClient interface {
+	Apply(opts ...ApolloClientOption)
+
 	Notifications(configServerURL, appID, clusterName string, notifications []Notification) (int, []Notification, error)
 
 	// 该接口会直接从数据库中获取配置，可以配合配置推送通知实现实时更新配置。
@@ -107,24 +109,15 @@ func WithAccessKey(accessKey string) ApolloClientOption {
 }
 
 func NewApolloClient(opts ...ApolloClientOption) ApolloClient {
-	c := &apolloClient{}
-	for _, opt := range opts {
-		opt(c)
-	}
-
-	if c.Doer == nil {
-		c.Doer = &http.Client{
+	c := &apolloClient{
+		IP:         getLocalIP(),
+		ConfigType: defaultConfigType,
+		Doer: &http.Client{
 			Timeout: defaultClientTimeout, // Notifications由于服务端会hold住请求60秒，所以请确保客户端访问服务端的超时时间要大于60秒。
-		}
+		},
 	}
 
-	if c.IP == "" {
-		c.IP = getLocalIP()
-	}
-
-	if c.ConfigType == "" {
-		c.ConfigType = defaultConfigType
-	}
+	c.Apply(opts...)
 
 	return c
 }
@@ -160,6 +153,12 @@ func (c *apolloClient) httpHeader(appID, uri string) map[string]string {
 	headers[HTTP_HEADER_TIMESTAMP] = timestamp
 
 	return headers
+}
+
+func (c *apolloClient) Apply(opts ...ApolloClientOption) {
+	for _, opt := range opts {
+		opt(c)
+	}
 }
 
 func (c *apolloClient) Notifications(configServerURL, appID, cluster string, notifications []Notification) (status int, result []Notification, err error) {
