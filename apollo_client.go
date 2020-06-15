@@ -135,7 +135,7 @@ func signature(timestamp, url, accessKey string) string {
 
 	key := []byte(accessKey)
 	mac := hmac.New(sha1.New, key)
-	mac.Write([]byte(stringToSign))
+	_, _ = mac.Write([]byte(stringToSign))
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 

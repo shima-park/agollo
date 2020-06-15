@@ -50,6 +50,12 @@ func (c *mockApolloClient) GetConfigServers(metaServerURL, appID string) (int, [
 	return c.getConfigServers(metaServerURL, appID)
 }
 
+type testCase struct {
+	Name      string
+	NewAgollo func(configs map[string]*Config) Agollo
+	Test      func(a Agollo, configs map[string]*Config)
+}
+
 func TestAgollo(t *testing.T) {
 	configServerURL := "http://localhost:8080"
 	appid := "test"
@@ -147,11 +153,7 @@ func TestAgollo(t *testing.T) {
 		}
 	}
 
-	var tests = []struct {
-		Name      string
-		NewAgollo func(configs map[string]*Config) Agollo
-		Test      func(a Agollo, configs map[string]*Config)
-	}{
+	var tests = []testCase{
 		{
 			Name: "测试：预加载的namespace应该正常可获取，非预加载的namespace无法获取配置",
 			NewAgollo: func(configs map[string]*Config) Agollo {
@@ -271,13 +273,13 @@ func TestAgollo(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(tests))
 	for _, test := range tests {
-		go func() {
+		go func(test testCase) {
 			defer wg.Done()
 
 			configs := newConfigs()
 			a := test.NewAgollo(configs)
 			test.Test(a, configs)
-		}()
+		}(test)
 	}
 
 	wg.Wait()
