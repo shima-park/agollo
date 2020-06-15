@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"sync"
@@ -85,14 +86,19 @@ func TestAgollo(t *testing.T) {
 		}
 	}
 
+	rand.Seed(time.Now().Unix())
+
 	newClient := func(configs map[string]*Config) ApolloClient {
 		return &mockApolloClient{
 			notifications: func(configServerURL, appID, clusterName string, notifications []Notification) (int, []Notification, error) {
 
 				rk, _ := strconv.Atoi(configs["application"].ReleaseKey)
-				rk++
-				configs["application"].ReleaseKey = fmt.Sprint(rk)
-				return 304, []Notification{
+				n := rand.Intn(2)
+				if n%2 == 0 {
+					rk++
+					configs["application"].ReleaseKey = fmt.Sprint(rk)
+				}
+				return 200, []Notification{
 					Notification{
 						NamespaceName:  "application",
 						NotificationID: rk,
@@ -242,7 +248,7 @@ func TestAgollo(t *testing.T) {
 								assert.Equal(t, expected, actual)
 							}
 						}
-						time.Sleep(time.Second)
+						time.Sleep(time.Second / 2)
 					}
 				}()
 
@@ -294,7 +300,7 @@ func TestAgollo(t *testing.T) {
 								assert.Equal(t, expected, actual, "%v %s", a.GetNameSpace(namespace), namespace)
 							}
 						}
-						time.Sleep(time.Second)
+						time.Sleep(time.Second / 2)
 					}
 				}()
 
@@ -308,6 +314,7 @@ func TestAgollo(t *testing.T) {
 	for _, test := range tests {
 		go func(test testCase) {
 			defer wg.Done()
+			t.Log("Test case:", test.Name)
 			configs := newConfigs()
 			test.Test(configs)
 		}(test)
