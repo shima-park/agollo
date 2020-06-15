@@ -128,7 +128,7 @@ func (a *agollo) initNamespace(namespaces ...string) error {
 	var existsNamespaces []Notification
 	for _, namespace := range uninitializedNamespaces {
 		// (1)读取配置 (2)设置初始化notificationMap
-		status, _, err := a.reloadNamespace(namespace, defaultNotificationID)
+		status, _, err := a.reloadNamespace(namespace)
 		if err != nil {
 			return err
 		}
@@ -142,27 +142,29 @@ func (a *agollo) initNamespace(namespaces ...string) error {
 					NamespaceName:  namespace,
 				},
 			)
+		} else {
+			// 不能正常获取notificationID的设置为默认notificationID
+			a.notificationMap.Store(namespace, defaultNotificationID)
 		}
+	}
+
+	if len(existsNamespaces) == 0 {
+		return nil
 	}
 
 	// 由于apollo去getRemoteNotifications获取一个不存在的namespace的notificationID时会hold请求90秒
 	// (1) 为防止意外传入一个不存在的namespace而发生上述情况，仅将成功获取配置在apollo存在的namespace,去初始化notificationID
 	// (2) 此处忽略error返回，在容灾逻辑下配置能正确读取而去获取notificationid可能会返回http请求失败，防止服务不能正常容灾启动
 	remoteNotifications, _ := a.getRemoteNotifications(existsNamespaces)
-	// 设置初始化的namespace的notificationID
 	for _, notification := range remoteNotifications {
-		a.updateNotificationIDIfIncreased(notification.NamespaceName, notification.NotificationID)
+		// 设置namespace初始化的notificationID
+		a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
 	}
 
 	return nil
 }
 
-func (a *agollo) reloadNamespace(namespace string, notificationID int) (status int, conf Configurations, err error) {
-	if !a.updateNotificationIDIfIncreased(namespace, notificationID) {
-		conf = a.getNameSpace(namespace)
-		return
-	}
-
+func (a *agollo) reloadNamespace(namespace string) (status int, conf Configurations, err error) {
 	var configServerURL string
 	configServerURL, err = a.opts.Balancer.Select()
 	if err != nil {
@@ -311,11 +313,14 @@ func (a *agollo) longPoll() {
 	// HTTP Status: 200时，正常返回notifications数据，数组含有需要更新namespace和notificationID
 	// HTTP Status: 304时，上报的namespace没有更新的修改，返回notifications为空数组，遍历空数组跳过
 	for _, notification := range notifications {
+		// 更新NotificationID
+		a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
+
 		// 读取旧缓存用来给监听队列
 		oldValue := a.getNameSpace(notification.NamespaceName)
 
 		// 更新namespace
-		_, newValue, err := a.reloadNamespace(notification.NamespaceName, notification.NotificationID)
+		_, newValue, err := a.reloadNamespace(notification.NamespaceName)
 		if err == nil {
 			// 发送到监听channel
 			a.sendWatchCh(notification.NamespaceName, oldValue, newValue)
@@ -541,15 +546,6 @@ func (a *agollo) getLocalNotifications() []Notification {
 		return true
 	})
 	return notifications
-}
-
-func (a *agollo) updateNotificationIDIfIncreased(namespace string, notificationID int) bool {
-	savedNotificationID, ok := a.notificationMap.Load(namespace)
-	if ok && savedNotificationID.(int) >= notificationID {
-		return false
-	}
-	a.notificationMap.Store(namespace, notificationID)
-	return true
 }
 
 func Init(configServerURL, appID string, opts ...Option) (err error) {

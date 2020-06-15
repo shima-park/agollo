@@ -1,7 +1,10 @@
 package agollo
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 	"sync"
@@ -51,9 +54,8 @@ func (c *mockApolloClient) GetConfigServers(metaServerURL, appID string) (int, [
 }
 
 type testCase struct {
-	Name      string
-	NewAgollo func(configs map[string]*Config) Agollo
-	Test      func(a Agollo, configs map[string]*Config)
+	Name string
+	Test func(configs map[string]*Config)
 }
 
 func TestAgollo(t *testing.T) {
@@ -84,22 +86,13 @@ func TestAgollo(t *testing.T) {
 	}
 
 	newClient := func(configs map[string]*Config) ApolloClient {
-		var lock sync.RWMutex
-		var once sync.Once
 		return &mockApolloClient{
 			notifications: func(configServerURL, appID, clusterName string, notifications []Notification) (int, []Notification, error) {
-				lock.RLock()
+
 				rk, _ := strconv.Atoi(configs["application"].ReleaseKey)
-				lock.RUnlock()
-
-				once.Do(func() {
-					rk++
-
-					lock.Lock()
-					configs["application"].ReleaseKey = fmt.Sprint(rk)
-					lock.Unlock()
-				})
-				return 200, []Notification{
+				rk++
+				configs["application"].ReleaseKey = fmt.Sprint(rk)
+				return 304, []Notification{
 					Notification{
 						NamespaceName:  "application",
 						NotificationID: rk,
@@ -115,9 +108,8 @@ func TestAgollo(t *testing.T) {
 					opt(&options)
 				}
 
-				lock.RLock()
 				config, ok := configs[namespace]
-				lock.RUnlock()
+
 				if !ok {
 					return 404, nil, nil
 				}
@@ -152,17 +144,25 @@ func TestAgollo(t *testing.T) {
 			},
 		}
 	}
-
+	_ = newBadClient
 	var tests = []testCase{
 		{
 			Name: "测试：预加载的namespace应该正常可获取，非预加载的namespace无法获取配置",
-			NewAgollo: func(configs map[string]*Config) Agollo {
-				a, err := New(configServerURL, appid, WithApolloClient(newClient(configs)), PreloadNamespaces("test.json"))
+			Test: func(configs map[string]*Config) {
+				backupfile, err := ioutil.TempFile("", "backup")
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer os.Remove(backupfile.Name())
+
+				a, err := New(configServerURL, appid,
+					WithApolloClient(newClient(configs)),
+					PreloadNamespaces("test.json"),
+					BackupFile(backupfile.Name()),
+				)
 				assert.Nil(t, err)
 				assert.NotNil(t, a)
-				return a
-			},
-			Test: func(a Agollo, configs map[string]*Config) {
+
 				for namespace, config := range configs {
 					for key, expected := range config.Configurations {
 						if namespace == "test.json" {
@@ -178,21 +178,28 @@ func TestAgollo(t *testing.T) {
 		},
 		{
 			Name: "测试：自动获取非预加载namespace时，正常读取配置配置项",
-			NewAgollo: func(configs map[string]*Config) Agollo {
+			Test: func(configs map[string]*Config) {
+				backupfile, err := ioutil.TempFile("", "backup")
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer os.Remove(backupfile.Name())
+
 				a, err := New(configServerURL, appid,
 					WithApolloClient(newClient(configs)),
 					AutoFetchOnCacheMiss(),
 					WithLogger(NewLogger(LoggerWriter(os.Stdout))),
+					BackupFile(backupfile.Name()),
 				)
 				assert.Nil(t, err)
 				assert.NotNil(t, a)
-				return a
-			},
-			Test: func(a Agollo, configs map[string]*Config) {
+
 				for namespace, config := range configs {
 					for key, expected := range config.Configurations {
 						actual := a.Get(key, WithNamespace(namespace))
-						assert.Equal(t, expected, actual, "Namespace: %s, Key: %s", namespace, key)
+						assert.Equal(t, expected, actual,
+							"configs: %v, agollo: %v, Namespace: %s, Key: %s",
+							configs, a.GetNameSpace(namespace), namespace, key)
 					}
 				}
 
@@ -205,13 +212,21 @@ func TestAgollo(t *testing.T) {
 		},
 		{
 			Name: "测试：初始化后 start 监听配置的情况",
-			NewAgollo: func(configs map[string]*Config) Agollo {
-				a, err := New(configServerURL, appid, WithApolloClient(newClient(configs)), AutoFetchOnCacheMiss())
+			Test: func(configs map[string]*Config) {
+				backupfile, err := ioutil.TempFile("", "backup")
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer os.Remove(backupfile.Name())
+
+				a, err := New(configServerURL, appid,
+					WithApolloClient(newClient(configs)),
+					AutoFetchOnCacheMiss(),
+					BackupFile(backupfile.Name()),
+				)
 				assert.Nil(t, err)
 				assert.NotNil(t, a)
-				return a
-			},
-			Test: func(a Agollo, configs map[string]*Config) {
+
 				a.Start()
 				defer a.Stop()
 
@@ -236,16 +251,34 @@ func TestAgollo(t *testing.T) {
 		},
 		{
 			Name: "测试：容灾配置项",
-			NewAgollo: func(configs map[string]*Config) Agollo {
+			Test: func(configs map[string]*Config) {
+				backupfile, err := ioutil.TempFile("", "backup")
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer os.Remove(backupfile.Name())
+
+				enc := json.NewEncoder(backupfile)
+
+				backup := map[string]Configurations{}
+				for _, config := range configs {
+					backup[config.NamespaceName] = config.Configurations
+				}
+
+				err = enc.Encode(backup)
+				if err != nil {
+					log.Fatal(err)
+				}
+
 				a, err := New(configServerURL, appid,
 					WithApolloClient(newBadClient(configs)),
 					AutoFetchOnCacheMiss(),
-					FailTolerantOnBackupExists())
+					FailTolerantOnBackupExists(),
+					BackupFile(backupfile.Name()),
+				)
 				assert.Nil(t, err)
 				assert.NotNil(t, a)
-				return a
-			},
-			Test: func(a Agollo, configs map[string]*Config) {
+
 				a.Start()
 				defer a.Stop()
 
@@ -254,11 +287,11 @@ func TestAgollo(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					for i := 0; i < 5; i++ {
+					for i := 0; i < 3; i++ {
 						for namespace, config := range configs {
 							for key, expected := range config.Configurations {
 								actual := a.Get(key, WithNamespace(namespace))
-								assert.Equal(t, expected, actual)
+								assert.Equal(t, expected, actual, "%v %s", a.GetNameSpace(namespace), namespace)
 							}
 						}
 						time.Sleep(time.Second)
@@ -275,10 +308,8 @@ func TestAgollo(t *testing.T) {
 	for _, test := range tests {
 		go func(test testCase) {
 			defer wg.Done()
-
 			configs := newConfigs()
-			a := test.NewAgollo(configs)
-			test.Test(a, configs)
+			test.Test(configs)
 		}(test)
 	}
 
