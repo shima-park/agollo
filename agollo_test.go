@@ -2,6 +2,7 @@ package agollo
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
@@ -176,7 +177,11 @@ func TestAgollo(t *testing.T) {
 		{
 			Name: "测试：自动获取非预加载namespace时，正常读取配置配置项",
 			NewAgollo: func(configs map[string]*Config) Agollo {
-				a, err := New(configServerURL, appid, WithApolloClient(newClient(configs)), AutoFetchOnCacheMiss())
+				a, err := New(configServerURL, appid,
+					WithApolloClient(newClient(configs)),
+					AutoFetchOnCacheMiss(),
+					WithLogger(NewLogger(LoggerWriter(os.Stdout))),
+				)
 				assert.Nil(t, err)
 				assert.NotNil(t, a)
 				return a
@@ -185,7 +190,7 @@ func TestAgollo(t *testing.T) {
 				for namespace, config := range configs {
 					for key, expected := range config.Configurations {
 						actual := a.Get(key, WithNamespace(namespace))
-						assert.Equal(t, expected, actual)
+						assert.Equal(t, expected, actual, "Namespace: %s, Key: %s", namespace, key)
 					}
 				}
 
@@ -213,7 +218,7 @@ func TestAgollo(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					for i := 0; i < 5; i++ {
+					for i := 0; i < 3; i++ {
 						for namespace, config := range configs {
 							for key, expected := range config.Configurations {
 								actual := a.Get(key, WithNamespace(namespace))
@@ -230,7 +235,10 @@ func TestAgollo(t *testing.T) {
 		{
 			Name: "测试：容灾配置项",
 			NewAgollo: func(configs map[string]*Config) Agollo {
-				a, err := New(configServerURL, appid, WithApolloClient(newBadClient(configs)), AutoFetchOnCacheMiss(), FailTolerantOnBackupExists())
+				a, err := New(configServerURL, appid,
+					WithApolloClient(newBadClient(configs)),
+					AutoFetchOnCacheMiss(),
+					FailTolerantOnBackupExists())
 				assert.Nil(t, err)
 				assert.NotNil(t, a)
 				return a
@@ -260,8 +268,17 @@ func TestAgollo(t *testing.T) {
 		},
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(len(tests))
 	for _, test := range tests {
-		configs := newConfigs()
-		test.Test(test.NewAgollo(configs), configs)
+		go func() {
+			defer wg.Done()
+
+			configs := newConfigs()
+			a := test.NewAgollo(configs)
+			test.Test(a, configs)
+		}()
 	}
+
+	wg.Wait()
 }
