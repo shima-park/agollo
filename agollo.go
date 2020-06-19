@@ -113,38 +113,30 @@ func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
 }
 
 func (a *agollo) initNamespace(namespaces ...string) error {
-	var uninitializedNamespaces []string
+	var existsNamespaces []Notification
 	for _, namespace := range namespaces {
 		_, found := a.initialized.LoadOrStore(namespace, true)
 		if !found {
-			uninitializedNamespaces = append(uninitializedNamespaces, namespace)
-		}
-	}
+			// (1)读取配置 (2)设置初始化notificationMap
+			status, _, err := a.reloadNamespace(namespace)
 
-	if len(uninitializedNamespaces) == 0 {
-		return nil
-	}
+			// 这里没法光凭靠error==nil来判断，即使http请求失败，如果开启 容错，会导致error丢失
+			// 从而可能将一个不存在的namespace拿去调用getRemoteNotifications导致被hold
+			if status == http.StatusOK {
+				existsNamespaces = append(existsNamespaces,
+					Notification{
+						NotificationID: defaultNotificationID,
+						NamespaceName:  namespace,
+					},
+				)
+			} else {
+				// 不能正常获取notificationID的设置为默认notificationID
+				a.notificationMap.Store(namespace, defaultNotificationID)
+			}
 
-	var existsNamespaces []Notification
-	for _, namespace := range uninitializedNamespaces {
-		// (1)读取配置 (2)设置初始化notificationMap
-		status, _, err := a.reloadNamespace(namespace)
-		if err != nil {
-			return err
-		}
-
-		// 这里没法光凭靠error==nil来判断，即使http请求失败，如果开启 容错，会导致error丢失
-		// 从而可能将一个不存在的namespace拿去调用getRemoteNotifications导致被hold
-		if status == http.StatusOK {
-			existsNamespaces = append(existsNamespaces,
-				Notification{
-					NotificationID: defaultNotificationID,
-					NamespaceName:  namespace,
-				},
-			)
-		} else {
-			// 不能正常获取notificationID的设置为默认notificationID
-			a.notificationMap.Store(namespace, defaultNotificationID)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
