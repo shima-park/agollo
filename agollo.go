@@ -113,47 +113,59 @@ func New(configServerURL, appID string, opts ...Option) (Agollo, error) {
 }
 
 func (a *agollo) initNamespace(namespaces ...string) error {
-	var existsNamespaces []Notification
+	var errs []error
 	for _, namespace := range namespaces {
 		_, found := a.initialized.LoadOrStore(namespace, true)
 		if !found {
 			// (1)读取配置 (2)设置初始化notificationMap
 			status, _, err := a.reloadNamespace(namespace)
 
-			// 这里没法光凭靠error==nil来判断，即使http请求失败，如果开启 容错，会导致error丢失
+			// 这里没法光凭靠error==nil来判断namespace是否存在，即使http请求失败，如果开启 容错，会导致error丢失
 			// 从而可能将一个不存在的namespace拿去调用getRemoteNotifications导致被hold
-			if status == http.StatusOK {
-				existsNamespaces = append(existsNamespaces,
-					Notification{
-						NotificationID: defaultNotificationID,
-						NamespaceName:  namespace,
-					},
-				)
-			} else {
-				// 不能正常获取notificationID的设置为默认notificationID
-				a.notificationMap.Store(namespace, defaultNotificationID)
-			}
+			a.setNotificationIDFromRemote(namespace, status == http.StatusOK)
 
+			// 即使存在异常也需要继续初始化下去，有一些使用者会拂掠初始化时的错误
+			// 期望在未来某个时间点apollo的服务器恢复过来
 			if err != nil {
-				return err
+				errs = append(errs, err)
 			}
 		}
 	}
 
-	if len(existsNamespaces) == 0 {
-		return nil
-	}
-
-	// 由于apollo去getRemoteNotifications获取一个不存在的namespace的notificationID时会hold请求90秒
-	// (1) 为防止意外传入一个不存在的namespace而发生上述情况，仅将成功获取配置在apollo存在的namespace,去初始化notificationID
-	// (2) 此处忽略error返回，在容灾逻辑下配置能正确读取而去获取notificationid可能会返回http请求失败，防止服务不能正常容灾启动
-	remoteNotifications, _ := a.getRemoteNotifications(existsNamespaces)
-	for _, notification := range remoteNotifications {
-		// 设置namespace初始化的notificationID
-		a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
+	if len(errs) > 0 {
+		return errs[0]
 	}
 
 	return nil
+}
+
+func (a *agollo) setNotificationIDFromRemote(namespace string, exists bool) {
+	if !exists {
+		// 不能正常获取notificationID的设置为默认notificationID
+		// 为之后longPoll提供localNoticationID参数
+		a.notificationMap.Store(namespace, defaultNotificationID)
+		return
+	}
+
+	localNotifications := []Notification{
+		Notification{
+			NotificationID: defaultNotificationID,
+			NamespaceName:  namespace,
+		},
+	}
+	// 由于apollo去getRemoteNotifications获取一个不存在的namespace的notificationID时会hold请求90秒
+	// (1) 为防止意外传入一个不存在的namespace而发生上述情况，仅将成功获取配置在apollo存在的namespace,去初始化notificationID
+	// (2) 此处忽略error返回，在容灾逻辑下配置能正确读取而去获取notificationid可能会返回http请求失败，防止服务不能正常容灾启动
+	remoteNotifications, _ := a.getRemoteNotifications(localNotifications)
+	if len(remoteNotifications) > 0 {
+		for _, notification := range remoteNotifications {
+			// 设置namespace初始化的notificationID
+			a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
+		}
+	} else {
+		// 不能正常获取notificationID的设置为默认notificationID
+		a.notificationMap.Store(namespace, defaultNotificationID)
+	}
 }
 
 func (a *agollo) reloadNamespace(namespace string) (status int, conf Configurations, err error) {
@@ -305,9 +317,6 @@ func (a *agollo) longPoll() {
 	// HTTP Status: 200时，正常返回notifications数据，数组含有需要更新namespace和notificationID
 	// HTTP Status: 304时，上报的namespace没有更新的修改，返回notifications为空数组，遍历空数组跳过
 	for _, notification := range notifications {
-		// 更新NotificationID
-		a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
-
 		// 读取旧缓存用来给监听队列
 		oldValue := a.getNameSpace(notification.NamespaceName)
 
@@ -316,6 +325,11 @@ func (a *agollo) longPoll() {
 		if err == nil {
 			// 发送到监听channel
 			a.sendWatchCh(notification.NamespaceName, oldValue, newValue)
+
+			// 仅在无异常的情况下更新NotificationID，
+			// 极端情况下，提前设置notificationID，reloadNamespace还未更新配置并将配置备份，
+			// 访问apollo失败导致notificationid已是最新，而配置不是最新
+			a.notificationMap.Store(notification.NamespaceName, notification.NotificationID)
 		} else {
 			a.sendErrorsCh("", notifications, notification.NamespaceName, err)
 		}
