@@ -20,9 +20,8 @@ go get -u github.com/shima-park/agollo
 ```
 
 ## Features
-* 实时同步配置
+* 实时同步配置,配置改动监听
 * 配置文件容灾
-* 零依赖
 * 支持多namespace, cluster
 * 客户端SLB
 * 提供Viper配置库的apollo插件
