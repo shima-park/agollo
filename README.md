@@ -47,16 +47,16 @@ func main() {
 	}
 
 	fmt.Println(
-		// 配置项foo的value
+		// 默认读取Namespace：application下key: foo的value
 		a.Get("foo"),
 
-		// namespace为test.json的所有配置项
+		// 获取namespace为test.json的所有配置项
 		a.GetNameSpace("test.json"),
 
-		// 默认值, 为xxx提供一个默认bar
-		a.Get("xxx", agollo.WithDefault("bar")),
+		// 当key：foo不存在时，提供一个默认值bar
+		a.Get("foo", agollo.WithDefault("bar")),
 
-		// namespace为other_namespace, key为foo的value
+		// 读取Namespace为other_namespace, key: foo的value
 		a.Get("foo", agollo.WithNamespace("other_namespace")),
 	)
 }
