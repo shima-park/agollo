@@ -319,8 +319,9 @@ go get github.com/coreos/etcd@v3.3.13+incompatible
 ### viper配置同步
 基于轮训的配置同步
 ```
-    app := viper.New()
-    app.SetConfigType("prop")
+    remote.SetAppID("your_appid")
+    v := viper.New()
+    v.SetConfigType("prop")
     err := v.AddRemoteProvider("apollo", "your_apollo_endpoint", "your_apollo_namespace")
     // error handle...
     err = v.ReadRemoteConfig()
@@ -339,8 +340,9 @@ go get github.com/coreos/etcd@v3.3.13+incompatible
 ```
 基于事件监听配置同步
 ```
-    app := viper.New()
-    app.SetConfigType("prop")
+    remote.SetAppID("your_appid")
+    v := viper.New()
+    v.SetConfigType("prop")
     err := v.AddRemoteProvider("apollo", "your_apollo_endpoint", "your_apollo_namespace")
     // error handle...
     err = v.ReadRemoteConfig()
