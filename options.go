@@ -16,27 +16,26 @@ var (
 )
 
 type Options struct {
-	AppID                      string        // appid
-	Cluster                    string        // 默认的集群名称，默认：default
-	DefaultNamespace           string        // 默认的命名空间，默认：application
-	PreloadNamespaces          []string      // 预加载命名空间，默认：application
-	ApolloClient               ApolloClient  // apollo HTTP api实现
-	Logger                     Logger        // 需要日志需要设置实现，或者注入有效的io.Writer，默认: ioutil.Discard
-	AutoFetchOnCacheMiss       bool          // 自动获取非预设以外的namespace的配置，默认：false
-	LongPollerInterval         time.Duration // 轮训间隔时间，默认：1s
-	BackupFile                 string        // 备份文件存放地址，默认：.agollo
-	FailTolerantOnBackupExists bool          // 服务器连接失败时允许读取备份，默认：false
-	Balancer                   Balancer      // ConfigServer负载均衡
-	EnableSLB                  bool          // 启用ConfigServer负载均衡
-	RefreshIntervalInSecond    time.Duration // ConfigServer刷新间隔
-	ClientOptions              []ApolloClientOption
+	AppID                      string               // appid
+	Cluster                    string               // 默认的集群名称，默认：default
+	DefaultNamespace           string               // Get时默认使用的命名空间，如果设置了该值，而不在PreloadNamespaces中，默认也会加入初始化逻辑中
+	PreloadNamespaces          []string             // 预加载命名空间，默认：为空
+	ApolloClient               ApolloClient         // apollo HTTP api实现
+	Logger                     Logger               // 日志实现类，可以设置自定义实现或者通过NewLogger()创建并设置有效的io.Writer，默认: ioutil.Discard
+	AutoFetchOnCacheMiss       bool                 // 自动获取非预设以外的Namespace的配置，默认：false
+	LongPollerInterval         time.Duration        // 轮训间隔时间，默认：1s
+	BackupFile                 string               // 备份文件存放地址，默认：.agollo
+	FailTolerantOnBackupExists bool                 // 服务器连接失败时允许读取备份，默认：false
+	Balancer                   Balancer             // ConfigServer负载均衡
+	EnableSLB                  bool                 // 启用ConfigServer负载均衡
+	RefreshIntervalInSecond    time.Duration        // ConfigServer刷新间隔
+	ClientOptions              []ApolloClientOption // 设置apollo HTTP api的配置项
 }
 
 func newOptions(configServerURL, appID string, opts ...Option) (Options, error) {
 	var options = Options{
 		AppID:                      appID,
 		Cluster:                    defaultCluster,
-		DefaultNamespace:           defaultNamespace,
 		ApolloClient:               NewApolloClient(),
 		Logger:                     NewLogger(),
 		AutoFetchOnCacheMiss:       defaultAutoFetchOnCacheMiss,
@@ -66,6 +65,13 @@ func newOptions(configServerURL, appID string, opts ...Option) (Options, error) 
 			b = NewRoundRobin(configServerURLs)
 		}
 		options.Balancer = b
+	}
+
+	if options.DefaultNamespace != "" &&
+		!stringInSlice(options.DefaultNamespace, options.PreloadNamespaces) {
+
+		options.PreloadNamespaces = append(
+			options.PreloadNamespaces, options.DefaultNamespace)
 	}
 
 	return options, nil
@@ -177,22 +183,31 @@ func AccessKey(accessKey string) Option {
 	}
 }
 
-func WithClientOptinons(opts ...ApolloClientOption) Option {
+func WithClientOptions(opts ...ApolloClientOption) Option {
 	return func(o *Options) {
 		o.ClientOptions = append(o.ClientOptions, opts...)
 	}
 }
 
 type GetOptions struct {
+	// Get时，如果key不存在将返回此值
 	DefaultValue string
-	Namespace    string
+
+	// Get时，显示的指定需要获取那个Namespace中的key。非空情况下，优先级顺序为：
+	// GetOptions.Namespace > Options.DefaultNamespace > "application"
+	Namespace string
 }
 
-func newGetOptions(opts ...GetOption) GetOptions {
+func (o Options) newGetOptions(opts ...GetOption) GetOptions {
 	var getOpts GetOptions
 	for _, opt := range opts {
 		opt(&getOpts)
 	}
+
+	if getOpts.Namespace == "" {
+		getOpts.Namespace = nonEmptyString(defaultNamespace, o.DefaultNamespace)
+	}
+
 	return getOpts
 }
 

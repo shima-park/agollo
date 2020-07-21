@@ -229,14 +229,7 @@ func (a *agollo) reloadNamespace(namespace string) (status int, conf Configurati
 }
 
 func (a *agollo) Get(key string, opts ...GetOption) string {
-	getOpts := newGetOptions(
-		append(
-			[]GetOption{
-				WithNamespace(a.opts.DefaultNamespace),
-			},
-			opts...,
-		)...,
-	)
+	getOpts := a.opts.newGetOptions(opts...)
 
 	val, found := a.GetNameSpace(getOpts.Namespace)[key]
 	if !found {

@@ -18,3 +18,21 @@ func splitCommaSeparatedURL(s string) []string {
 
 	return urls
 }
+
+func stringInSlice(t string, ss []string) bool {
+	for _, s := range ss {
+		if s == t {
+			return true
+		}
+	}
+	return false
+}
+
+func nonEmptyString(def string, ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return def
+}
