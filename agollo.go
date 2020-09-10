@@ -367,7 +367,10 @@ func (a *agollo) WatchNamespace(namespace string, stop chan bool) <-chan *Apollo
 			}
 
 			if stop != nil {
-				<-stop
+				select {
+				case <-a.stopCh:
+				case <-stop:
+				}
 				a.watchNamespaceChMap.Delete(watchNamespace)
 			}
 		}()
