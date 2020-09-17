@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -140,7 +141,8 @@ func (a *agollo) initNamespace(namespaces ...string) error {
 }
 
 func (a *agollo) setNotificationIDFromRemote(namespace string, exists bool) {
-	if !exists {
+	// 忽略APP_ALL命名空间
+	if !exists || "APP_ALL" == strings.ToUpper(namespace) {
 		// 不能正常获取notificationID的设置为默认notificationID
 		// 为之后longPoll提供localNoticationID参数
 		a.notificationMap.Store(namespace, defaultNotificationID)
