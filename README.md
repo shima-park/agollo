@@ -245,7 +245,6 @@ agollo.NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error)
 	agollo.BackupFile("/tmp/xxx/.agollo")
 	// 在连接apollo失败时，如果在配置的目录下存在.agollo备份配置，会读取备份在服务器无法连接的情况下
 	agollo.FailTolerantOnBackupExists(),
-)
 ```
 
 ### 详细特性展示
