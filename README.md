@@ -89,7 +89,7 @@ for{
 		// handle error
 	case resp := <-watchCh:
 			fmt.Println(
-			    "Namesapce:", resp.Namespace,
+			    "Namespace:", resp.Namespace,
 			    "OldValue:", resp.OldValue,
 			    "NewValue:", resp.NewValue,
 			    "Error:", resp.Error,
@@ -125,7 +125,7 @@ a.Get("foo", agollo.WithNamespace("Namespace_B")) // 从Namespace_B中获取配�
 // ...
 ```
 
-或者初始化时增加agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...)预加载这几个namesapce的配置
+或者初始化时增加agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...)预加载这几个Namespace的配置
 ```
 a, err := agollo.New("localhost:8080", "your_appid",
 		agollo.PreloadNamespaces("Namespace_A", "Namespace_B", ...),
