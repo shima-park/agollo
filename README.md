@@ -88,12 +88,12 @@ for{
 	case err := <- errorCh:
 		// handle error
 	case resp := <-watchCh:
-			fmt.Println(
-			    "Namespace:", resp.Namespace,
-			    "OldValue:", resp.OldValue,
-			    "NewValue:", resp.NewValue,
-			    "Error:", resp.Error,
-			)
+		fmt.Println(
+			"Namespace:", resp.Namespace,
+			"OldValue:", resp.OldValue,
+			"NewValue:", resp.NewValue,
+			"Error:", resp.Error,
+		)
 	}
 }
 ```
