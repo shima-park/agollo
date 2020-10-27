@@ -89,7 +89,7 @@ for{
 		// handle error
 	case resp := <-watchCh:
 			fmt.Println(
-			    "Namesapce:", resp.Namesapce,
+			    "Namesapce:", resp.Namespace,
 			    "OldValue:", resp.OldValue,
 			    "NewValue:", resp.NewValue,
 			    "Error:", resp.Error,
