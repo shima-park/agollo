@@ -75,7 +75,7 @@ errorCh := a.Start()  // Start后会启动goroutine监听变化，并更新agoll
 ### 配置监听
 监听所有namespace配置变更事件
 ```
-a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
+a, err := agollo.New("localhost:8080", "your_appid", agollo.PreloadNamespaces("application", "test.json"))
 // error handle...
 
 errorCh := a.Start()  // Start后会启动goroutine监听变化，并更新agollo对象内的配置cache
