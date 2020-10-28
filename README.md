@@ -65,7 +65,7 @@ func main() {
 ### 实时同步配置
 启动一个goroutine实时同步配置, errorCh返回notifications/v2非httpcode(200)的错误信息
 ```
-a, err := agollo.New("localhost:8080", "your_appid", agollo.AutoFetchOnCacheMiss())
+a, err := agollo.New("localhost:8080", "your_appid", agollo.PreloadNamespaces("application", "test.json"))
 // error handle...
 
 errorCh := a.Start()  // Start后会启动goroutine监听变化，并更新agollo对象内的配置cache
