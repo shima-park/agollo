@@ -19,7 +19,7 @@ var (
 	_ viperConfigManager = apolloConfigManager{}
 	// getConfigManager方法每次返回新对象导致缓存无效，
 	// 这里通过endpoint作为key复一个对象
-	// key: endpoint value: agollo.Agollo
+	// key: endpoint+appid value: agollo.Agollo
 	agolloMap sync.Map
 )
 
@@ -61,7 +61,8 @@ func newApolloConfigManager(appid, endpoint string, opts []agollo.Option) (*apol
 		return nil, errors.New("The appid is not set")
 	}
 
-	ag, err := newAgollo(appid, endpoint, opts)
+	ag, err := 
+	(appid, endpoint, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ func newApolloConfigManager(appid, endpoint string, opts []agollo.Option) (*apol
 }
 
 func newAgollo(appid, endpoint string, opts []agollo.Option) (agollo.Agollo, error) {
-	i, found := agolloMap.Load(endpoint)
+	i, found := agolloMap.Load(endpoint + "/" + appid)
 	if !found {
 		ag, err := agollo.New(
 			endpoint,
@@ -87,7 +88,7 @@ func newAgollo(appid, endpoint string, opts []agollo.Option) (agollo.Agollo, err
 		// 监听并同步apollo配置
 		ag.Start()
 
-		agolloMap.Store(endpoint, ag)
+		agolloMap.Store(endpoint + "/" + appid, ag)
 
 		return ag, nil
 	}
