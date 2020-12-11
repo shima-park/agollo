@@ -61,8 +61,7 @@ func newApolloConfigManager(appid, endpoint string, opts []agollo.Option) (*apol
 		return nil, errors.New("The appid is not set")
 	}
 
-	ag, err := 
-	(appid, endpoint, opts)
+	ag, err := newAgollo(appid, endpoint, opts)
 	if err != nil {
 		return nil, err
 	}
