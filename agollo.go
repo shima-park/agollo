@@ -63,6 +63,8 @@ type agollo struct {
 	stop     bool
 	stopCh   chan struct{}
 	stopLock sync.Mutex
+
+	backupLock sync.RWMutex
 }
 
 func NewWithConfigFile(configFilePath string, opts ...Option) (Agollo, error) {
@@ -148,7 +150,7 @@ func (a *agollo) setNotificationIDFromRemote(namespace string, exists bool) {
 	}
 
 	localNotifications := []Notification{
-		Notification{
+		{
 			NotificationID: defaultNotificationID,
 			NamespaceName:  namespace,
 		},
@@ -195,13 +197,13 @@ func (a *agollo) reloadNamespace(namespace string) (status int, conf Configurati
 		conf = config.Configurations
 
 		// 备份配置
-		if err = a.backup(); err != nil {
+		if err = a.backup(namespace, config.Configurations); err != nil {
 			a.log("BackupFile", a.opts.BackupFile, "Namespace", namespace,
 				"Action", "Backup", "Error", err)
 			return
 		}
 	case http.StatusNotModified: // 服务端未修改配置情况下返回304
-		conf = a.getNameSpace(namespace)
+		conf = a.getNamespace(namespace)
 	default:
 		a.log("ConfigServerUrl", configServerURL, "Namespace", namespace,
 			"Action", "GetConfigsFromNonCache", "ServerResponseStatus", status,
@@ -211,10 +213,10 @@ func (a *agollo) reloadNamespace(namespace string) (status int, conf Configurati
 
 		// 异常状况下，如果开启容灾，则读取备份
 		if a.opts.FailTolerantOnBackupExists {
-			backupConfig, lerr := a.loadBackup(namespace)
+			backupConfig, lerr := a.loadBackupByNamespace(namespace)
 			if lerr != nil {
 				a.log("BackupFile", a.opts.BackupFile, "Namespace", namespace,
-					"Action", "LoadBackup", "Error", lerr)
+					"Action", "loadBackupByNamespace", "Error", lerr)
 				return
 			}
 
@@ -247,13 +249,13 @@ func (a *agollo) GetNameSpace(namespace string) Configurations {
 		if err != nil {
 			a.log("Action", "InitNamespace", "Error", err)
 		}
-		return a.getNameSpace(namespace)
+		return a.getNamespace(namespace)
 	}
 
 	return config.(Configurations)
 }
 
-func (a *agollo) getNameSpace(namespace string) Configurations {
+func (a *agollo) getNamespace(namespace string) Configurations {
 	v, ok := a.cache.Load(namespace)
 	if !ok {
 		return Configurations{}
@@ -311,7 +313,7 @@ func (a *agollo) longPoll() {
 	// HTTP Status: 304时，上报的namespace没有更新的修改，返回notifications为空数组，遍历空数组跳过
 	for _, notification := range notifications {
 		// 读取旧缓存用来给监听队列
-		oldValue := a.getNameSpace(notification.NamespaceName)
+		oldValue := a.getNamespace(notification.NamespaceName)
 
 		// 更新namespace
 		_, newValue, err := a.reloadNamespace(notification.NamespaceName)
@@ -458,29 +460,36 @@ func (a *agollo) log(kvs ...interface{}) {
 	)
 }
 
-func (a *agollo) backup() error {
-	backup := map[string]Configurations{}
-	a.cache.Range(func(key, val interface{}) bool {
-		k, _ := key.(string)
-		conf, _ := val.(Configurations)
-		backup[k] = conf
-		return true
-	})
+func (a *agollo) backup(namespace string, config Configurations) error {
+	backup, err := a.loadBackup()
+	if err != nil {
+		backup = map[string]Configurations{}
+	}
 
+	a.backupLock.Lock()
+	defer a.backupLock.Unlock()
+
+	backup[namespace] = config
 	data, err := json.Marshal(backup)
 	if err != nil {
 		return err
 	}
 
-	err = os.MkdirAll(filepath.Dir(a.opts.BackupFile), 0777)
-	if err != nil && !os.IsExist(err) {
-		return err
+	dir := filepath.Dir(a.opts.BackupFile)
+	if _, err = os.Stat(dir); os.IsNotExist(err) {
+		err = os.MkdirAll(dir, 0755)
+		if err != nil && !os.IsExist(err) {
+			return err
+		}
 	}
 
-	return ioutil.WriteFile(a.opts.BackupFile, data, 0666)
+	return ioutil.WriteFile(a.opts.BackupFile, data, 0644)
 }
 
-func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
+func (a *agollo) loadBackup() (map[string]Configurations, error) {
+	a.backupLock.RLock()
+	defer a.backupLock.RUnlock()
+
 	if _, err := os.Stat(a.opts.BackupFile); err != nil {
 		return nil, err
 	}
@@ -495,14 +504,16 @@ func (a *agollo) loadBackup(specifyNamespace string) (Configurations, error) {
 	if err != nil {
 		return nil, err
 	}
+	return backup, nil
+}
 
-	for namespace, configs := range backup {
-		if namespace == specifyNamespace {
-			return configs, nil
-		}
+func (a *agollo) loadBackupByNamespace(namespace string) (Configurations, error) {
+	backup, err := a.loadBackup()
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, nil
+	return backup[namespace], nil
 }
 
 // getRemoteNotifications
