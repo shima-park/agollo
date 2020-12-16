@@ -15,6 +15,21 @@ func main() {
 		agollo.PreloadNamespaces("TEST.Namespace"),                          // 预先加载的namespace列表，如果是通过配置启动，会在app.properties配置的基础上追加
 		agollo.AutoFetchOnCacheMiss(),                                       // 在配置未找到时，去apollo的带缓存的获取配置接口，获取配置
 		agollo.FailTolerantOnBackupExists(),                                 // 在连接apollo失败时，如果在配置的目录下存在.agollo备份配置，会读取备份在服务器无法连接的情况下
+
+		// apollo 官方签名认证
+		// agollo.WithClientOptions(
+		// 	agollo.WithAccessKey("your_access_key"),
+		// ),
+
+		// 自定义签名认证
+		// agollo.WithClientOptions(
+		// 	agollo.WithSignatureFunc(
+		// 		func(*agollo.SignatureContext) agollo.Header {
+		// 			return agollo.Header{
+		// 				"Authorization": "basic xxxxxxxx",
+		// 			}
+		// 		}),
+		// ),
 	)
 	if err != nil {
 		panic(err)
@@ -53,6 +68,7 @@ func main() {
 	// 如果想监听并同步服务器配置变化，启动apollo长轮训
 	// 返回一个期间发生错误的error channel,按照需要去处理
 	errorCh := agollo.Start()
+	defer agollo.Stop()
 
 	// 监听apollo配置更改事件
 	// 返回namespace和其变化前后的配置,以及可能出现的error
@@ -81,6 +97,4 @@ func main() {
 	}()
 
 	select {}
-
-	agollo.Stop()
 }

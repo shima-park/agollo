@@ -26,6 +26,7 @@ go get -u github.com/shima-park/agollo
 * 客户端SLB
 * 提供Viper配置库的apollo插件
 * 支持通过 ACCESSKEY_SECRET 来实现 client 安全访问
+* 支持自定义签名认证
 
 ## 示例
 
