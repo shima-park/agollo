@@ -56,10 +56,10 @@ func (c *apolloClient) Apply(opts ...ApolloClientOption) {
 }
 
 func (c *apolloClient) Notifications(configServerURL, appID, cluster string, notifications []Notification) (status int, result []Notification, err error) {
-	configServerURL = normalizeURL(configServerURL)
-	if notifications == nil || len(notifications) == 0 {
+	if len(notifications) == 0 {
 		return 0, []Notification{}, nil
 	}
+	configServerURL = normalizeURL(configServerURL)
 	requestURI := fmt.Sprintf("/notifications/v2?appId=%s&cluster=%s&notifications=%s",
 		url.QueryEscape(appID),
 		url.QueryEscape(cluster),
