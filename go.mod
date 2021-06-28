@@ -1,4 +1,4 @@
-module github.com/yoyofxteam/agollo
+module github.com/shima-park/agollo
 
 go 1.13
 
