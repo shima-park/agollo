@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	crypt "github.com/bketelsen/crypt/config"
 	"github.com/shima-park/agollo"
 	"github.com/spf13/viper"
-	crypt "github.com/xordataexchange/crypt/config"
 )
 
 var (
@@ -87,7 +87,7 @@ func newAgollo(appid, endpoint string, opts []agollo.Option) (agollo.Agollo, err
 		// 监听并同步apollo配置
 		ag.Start()
 
-		agolloMap.Store(endpoint + "/" + appid, ag)
+		agolloMap.Store(endpoint+"/"+appid, ag)
 
 		return ag, nil
 	}
