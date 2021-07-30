@@ -309,13 +309,6 @@ func main(){
 }
 ```
 
-如果碰到panic: codecgen version mismatch: current: 8, need 10这种错误，详情请见[issue](https://github.com/shima-park/agollo/issues/14)
-解决办法是将etcd升级到3.3.13:
-```
-// 使用go module管理依赖包，使用如下命令更新到此版本，或者更高版本
-go get github.com/coreos/etcd@v3.3.13+incompatible
-```
-
 ### viper配置同步
 基于轮训的配置同步
 ```
