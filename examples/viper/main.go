@@ -67,3 +67,26 @@ func main() {
 	}
 
 }
+
+func extenderTestWatchAndNotify() {
+	remoteProvider, _ := remote.NewApolloProvider(remote.ApolloConfig{
+		Endpoint: "localhost:8080",
+		AppID: "SampleApp",
+		ConfigType: "prop",
+		Namespace: "application",
+	})
+
+	v := remoteProvider.GetViper()
+	// sync read remote config
+	_ = v.ReadRemoteConfig()
+	fmt.Println("app.AllSettings:", v.AllSettings())
+
+	respChan := remoteProvider.WatchRemoteConfigOnChannel()
+	go func(rc <-chan bool) {
+		for {
+			<-rc
+			// on changed and notify
+			fmt.Println("app.AllSettings:", v.AllSettings())
+		}
+	}(respChan)
+}
