@@ -74,7 +74,7 @@ func newApolloConfigManager(appid, endpoint string, opts []agollo.Option) (*apol
 
 func newAgollo(appid, endpoint string, opts []agollo.Option) (agollo.Agollo, error) {
 	i, found := agolloMap.Load(endpoint + "/" + appid)
-	if !found {
+	if !found || i.(agollo.Agollo).Options().AppID != appid {
 		ag, err := agollo.New(
 			endpoint,
 			appid,
