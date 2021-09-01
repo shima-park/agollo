@@ -59,7 +59,9 @@ type agollo struct {
 
 	errorsCh chan *LongPollerError
 
-	runOnce  sync.Once
+	runOnce      sync.Once
+	runHeartBeat sync.Once
+
 	stop     bool
 	stopCh   chan struct{}
 	stopLock sync.Mutex
@@ -286,7 +288,61 @@ func (a *agollo) Start() <-chan *LongPollerError {
 		}()
 	})
 
+	if a.opts.EnableHeartBeat {
+		a.runHeartBeat.Do(func() {
+			go func() {
+				timer := time.NewTimer(a.opts.HeartBeatInterval)
+				defer timer.Stop()
+				for !a.shouldStop() {
+					select {
+					case <-timer.C:
+						a.heartBeat()
+						timer.Reset(a.opts.HeartBeatInterval)
+					case <-a.stopCh:
+						return
+					}
+				}
+			}()
+		})
+	}
+
 	return a.errorsCh
+}
+
+func (a *agollo) heartBeat() {
+	var configServerURL string
+	configServerURL, err := a.opts.Balancer.Select()
+	if err != nil {
+		a.log("Action", "BalancerSelect", "Error", err)
+		return
+	}
+
+	a.releaseKeyMap.Range(func(namespace, cachedReleaseKey interface{}) bool {
+		var config *Config
+		namespaceStr := namespace.(string)
+		status, config, err := a.opts.ApolloClient.GetConfigsFromNonCache(
+			configServerURL,
+			a.opts.AppID,
+			a.opts.Cluster,
+			namespaceStr,
+			ReleaseKey(cachedReleaseKey.(string)),
+		)
+		if err != nil {
+			return true
+		}
+		if status == http.StatusOK {
+			oldValue := a.getNamespace(namespaceStr)
+			a.cache.Store(namespace, config.Configurations)
+			a.releaseKeyMap.Store(namespace, config.ReleaseKey)
+			if err = a.backup(namespaceStr, config.Configurations); err != nil {
+				a.log("BackupFile", a.opts.BackupFile, "Namespace", namespace,
+					"Action", "Backup", "Error", err)
+			}
+			a.sendWatchCh(namespaceStr, oldValue, config.Configurations)
+			a.notificationMap.Store(namespaceStr, config.ReleaseKey)
+		}
+		return true
+	})
 }
 
 func (a *agollo) shouldStop() bool {
@@ -316,8 +372,15 @@ func (a *agollo) longPoll() {
 		oldValue := a.getNamespace(notification.NamespaceName)
 
 		// 更新namespace
-		_, newValue, err := a.reloadNamespace(notification.NamespaceName)
+		status, newValue, err := a.reloadNamespace(notification.NamespaceName)
+
 		if err == nil {
+			// Notifications 有更新，但是 GetConfigsFromNonCache 返回 304，
+			// 可能是请求恰好打在尚未同步的节点上，不更新 NotificationID，等待下次再更新
+			if status == http.StatusNotModified {
+				continue
+			}
+
 			// 发送到监听channel
 			a.sendWatchCh(notification.NamespaceName, oldValue, newValue)
 
