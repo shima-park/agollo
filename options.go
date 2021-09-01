@@ -13,6 +13,8 @@ var (
 	defaultFailTolerantOnBackupExists = false
 	defaultEnableSLB                  = false
 	defaultLongPollInterval           = 1 * time.Second
+	defaultEnableHeartBeat            = false
+	defaultHeartBeatInterval          = 300 * time.Second
 )
 
 type Options struct {
@@ -30,6 +32,8 @@ type Options struct {
 	EnableSLB                  bool                 // 启用ConfigServer负载均衡
 	RefreshIntervalInSecond    time.Duration        // ConfigServer刷新间隔
 	ClientOptions              []ApolloClientOption // 设置apollo HTTP api的配置项
+	EnableHeartBeat            bool                 // 是否允许兜底检查，默认：false
+	HeartBeatInterval          time.Duration        // 兜底检查间隔时间，默认：300s
 }
 
 func newOptions(configServerURL, appID string, opts ...Option) (Options, error) {
@@ -43,6 +47,8 @@ func newOptions(configServerURL, appID string, opts ...Option) (Options, error) 
 		BackupFile:                 defaultBackupFile,
 		FailTolerantOnBackupExists: defaultFailTolerantOnBackupExists,
 		EnableSLB:                  defaultEnableSLB,
+		EnableHeartBeat:            defaultEnableHeartBeat,
+		HeartBeatInterval:          defaultHeartBeatInterval,
 	}
 	for _, opt := range opts {
 		opt(&options)
@@ -144,6 +150,18 @@ func AutoFetchOnCacheMiss() Option {
 func LongPollerInterval(i time.Duration) Option {
 	return func(o *Options) {
 		o.LongPollerInterval = i
+	}
+}
+
+func EnableHeartBeat(b bool) Option {
+	return func(o *Options) {
+		o.EnableHeartBeat = b
+	}
+}
+
+func HeartBeatInterval(i time.Duration) Option {
+	return func(o *Options) {
+		o.HeartBeatInterval = i
 	}
 }
 

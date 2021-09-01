@@ -26,6 +26,8 @@ func TestOptions(t *testing.T) {
 				assert.Equal(t, defaultBackupFile, opts.BackupFile)
 				assert.Equal(t, defaultFailTolerantOnBackupExists, opts.FailTolerantOnBackupExists)
 				assert.Equal(t, defaultEnableSLB, opts.EnableSLB)
+				assert.Equal(t, defaultEnableHeartBeat, opts.EnableHeartBeat)
+				assert.Equal(t, defaultHeartBeatInterval, opts.HeartBeatInterval)
 				assert.NotNil(t, opts.Logger)
 				assert.NotNil(t, opts.ApolloClient)
 				assert.NotNil(t, opts.Balancer)
@@ -50,6 +52,8 @@ func TestOptions(t *testing.T) {
 				BackupFile("test_backup"),
 				FailTolerantOnBackupExists(),
 				AccessKey("test_access_key"),
+				EnableHeartBeat(true),
+				HeartBeatInterval(time.Second * 120),
 			},
 			func(opts Options) {
 				assert.Equal(t, "test_cluster", opts.Cluster)
@@ -66,6 +70,8 @@ func TestOptions(t *testing.T) {
 				ac := &apolloClient{}
 				ac.Apply(opts.ClientOptions...)
 				assert.Equal(t, "test_access_key", ac.AccessKey)
+				assert.Equal(t, true, opts.EnableHeartBeat)
+				assert.Equal(t, time.Second*120, opts.HeartBeatInterval)
 			},
 		},
 		{
