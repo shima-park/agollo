@@ -323,12 +323,12 @@ func main(){
     for {
 	time.Sleep(10 * time.Second)
 
-	err := app.WatchRemoteConfig() // 每次调用该方法，会从apollo缓存接口获取一次配置，并更新viper
+	err := v.WatchRemoteConfig() // 每次调用该方法，会从apollo缓存接口获取一次配置，并更新viper
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("app.AllSettings:", app.AllSettings())
+	fmt.Println("AllSettings:", v.AllSettings())
      }
 ```
 基于事件监听配置同步
@@ -341,11 +341,11 @@ func main(){
     err = v.ReadRemoteConfig()
     // error handle...
 
-    app.WatchRemoteConfigOnChannel() // 启动一个goroutine来同步配置更改
+    v.WatchRemoteConfigOnChannel() // 启动一个goroutine来同步配置更改
 
     for {
 	time.Sleep(1 * time.Second)
-	fmt.Println("app.AllSettings:", app.AllSettings())
+	fmt.Println("AllSettings:", v.AllSettings())
      }
 ```
 
