@@ -380,6 +380,13 @@ func (a *agollo) longPoll() {
 			if status == http.StatusNotModified {
 				continue
 			}
+			
+			if len(oldValue.Different(newValue)) == 0 {
+				// case 可能是apollo集群搭建问题
+				// GetConfigsFromNonCache 返回了了一模一样的数据，但是http.status code == 200
+				// 导致NotificationID更新了，但是真实的配置没有更新，而后续也不会获取到新配置，除非有新的变更触发
+				continue
+			}
 
 			// 发送到监听channel
 			a.sendWatchCh(notification.NamespaceName, oldValue, newValue)
