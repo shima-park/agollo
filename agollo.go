@@ -338,9 +338,6 @@ func (a *agollo) heartBeat() {
 				a.log("BackupFile", a.opts.BackupFile, "Namespace", namespace,
 					"Action", "Backup", "Error", err)
 			}
-			if len(oldValue.Different(config.Configurations)) == 0 {
-				return true
-			}
 			a.sendWatchCh(namespaceStr, oldValue, config.Configurations)
 			a.notificationMap.Store(namespaceStr, config.ReleaseKey)
 		}
